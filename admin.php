@@ -237,6 +237,19 @@ $students = getStudents($teacher_class_id);
         </div>
     </div>
 
+    <!-- 自绘确认弹窗（必须在脚本之前，脚本要绑定其按钮事件） -->
+    <div class="modal-overlay" id="adminModalOverlay" hidden>
+        <div class="modal-card">
+            <div class="modal-stamp" id="adminModalStamp">!</div>
+            <div class="modal-title" id="adminModalTitle"></div>
+            <div class="modal-desc" id="adminModalDesc"></div>
+            <div class="modal-actions">
+                <button class="modal-btn ghost" id="adminModalCancel">取消</button>
+                <button class="modal-btn solid" id="adminModalOk">确定</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 自绘确认弹窗
         let confirmOkCallback = null;
@@ -258,9 +271,12 @@ $students = getStudents($teacher_class_id);
             confirmOkCallback = null;
         }
 
-        document.getElementById('adminModalOk').addEventListener('click', () => confirmOkCallback && confirmOkCallback());
-        document.getElementById('adminModalCancel').addEventListener('click', () => { hideAsk(); });
-        document.getElementById('adminModalOverlay').addEventListener('click', e => {
+        const okBtn = document.getElementById('adminModalOk');
+        const cancelBtn = document.getElementById('adminModalCancel');
+        const overlay = document.getElementById('adminModalOverlay');
+        if (okBtn) okBtn.addEventListener('click', () => confirmOkCallback && confirmOkCallback());
+        if (cancelBtn) cancelBtn.addEventListener('click', () => { hideAsk(); });
+        if (overlay) overlay.addEventListener('click', e => {
             if (e.target === e.currentTarget) hideAsk();
         });
 
@@ -269,17 +285,5 @@ $students = getStudents($teacher_class_id);
             if (ok) form.submit();
         }
     </script>
-
-    <div class="modal-overlay" id="adminModalOverlay" hidden>
-        <div class="modal-card">
-            <div class="modal-stamp" id="adminModalStamp">!</div>
-            <div class="modal-title" id="adminModalTitle"></div>
-            <div class="modal-desc" id="adminModalDesc"></div>
-            <div class="modal-actions">
-                <button class="modal-btn ghost" id="adminModalCancel">取消</button>
-                <button class="modal-btn solid" id="adminModalOk">确定</button>
-            </div>
-        </div>
-    </div>
 </body>
 </html>

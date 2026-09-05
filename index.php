@@ -268,9 +268,12 @@ $students = getStudents();
             modalCancelCallback = null;
         }
 
-        document.getElementById('modalOk').addEventListener('click', () => modalOkCallback && modalOkCallback());
-        document.getElementById('modalCancel').addEventListener('click', () => modalCancelCallback && modalCancelCallback());
-        document.getElementById('modalOverlay').addEventListener('click', e => {
+        const okBtn = document.getElementById('modalOk');
+        const cancelBtn = document.getElementById('modalCancel');
+        const overlay = document.getElementById('modalOverlay');
+        if (okBtn) okBtn.addEventListener('click', () => modalOkCallback && modalOkCallback());
+        if (cancelBtn) cancelBtn.addEventListener('click', () => modalCancelCallback && modalCancelCallback());
+        if (overlay) overlay.addEventListener('click', e => {
             // 只有带取消按钮的确认弹窗才允许点空白关闭，提示弹窗必须点"知道了"
             if (e.target === e.currentTarget && modalCancelCallback) modalCancelCallback();
         });

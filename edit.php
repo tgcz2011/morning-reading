@@ -276,6 +276,19 @@ $classes = getAllClasses();
         </div>
     </div>
 
+    <!-- 自绘确认弹窗（必须在脚本之前，脚本要绑定其按钮事件） -->
+    <div class="modal-overlay" id="editModalOverlay" hidden>
+        <div class="modal-card">
+            <div class="modal-stamp" id="editModalStamp">!</div>
+            <div class="modal-title" id="editModalTitle"></div>
+            <div class="modal-desc" id="editModalDesc"></div>
+            <div class="modal-actions">
+                <button class="modal-btn ghost" id="editModalCancel">取消</button>
+                <button class="modal-btn solid" id="editModalOk">确定</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 自绘确认弹窗
         let confirmOkCallback = null;
@@ -297,9 +310,12 @@ $classes = getAllClasses();
             confirmOkCallback = null;
         }
 
-        document.getElementById('editModalOk').addEventListener('click', () => confirmOkCallback && confirmOkCallback());
-        document.getElementById('editModalCancel').addEventListener('click', () => { hideAsk(); });
-        document.getElementById('editModalOverlay').addEventListener('click', e => {
+        const okBtn = document.getElementById('editModalOk');
+        const cancelBtn = document.getElementById('editModalCancel');
+        const overlay = document.getElementById('editModalOverlay');
+        if (okBtn) okBtn.addEventListener('click', () => confirmOkCallback && confirmOkCallback());
+        if (cancelBtn) cancelBtn.addEventListener('click', () => { hideAsk(); });
+        if (overlay) overlay.addEventListener('click', e => {
             if (e.target === e.currentTarget) hideAsk();
         });
 
@@ -308,17 +324,5 @@ $classes = getAllClasses();
             if (ok) form.submit();
         }
     </script>
-
-    <div class="modal-overlay" id="editModalOverlay" hidden>
-        <div class="modal-card">
-            <div class="modal-stamp" id="editModalStamp">!</div>
-            <div class="modal-title" id="editModalTitle"></div>
-            <div class="modal-desc" id="editModalDesc"></div>
-            <div class="modal-actions">
-                <button class="modal-btn ghost" id="editModalCancel">取消</button>
-                <button class="modal-btn solid" id="editModalOk">确定</button>
-            </div>
-        </div>
-    </div>
 </body>
 </html>
