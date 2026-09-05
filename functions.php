@@ -757,54 +757,58 @@ function parseStudentFile($upload) {
     // 其他（.csv 等）按文本解析
     return ['rows' => parseCsvText(file_get_contents($upload['tmp_name']))];
 }
-
-// 输出学生名单模板（优先 .xlsx，服务器无 zip 扩展时退回 .csv）
+// 输出学生名单模板（.xlsx）
+// 直接构建标准 ZIP 字节流（STORE 无压缩），不依赖 ZipArchive 扩展与临时文件，
+// 兼容 tempnam 受限/禁用的主机环境
 function outputStudentTemplate() {
-    if (class_exists('ZipArchive')) {
-        $zip = new ZipArchive();
-        $tmp = tempnam(sys_get_temp_dir(), 'mrtpl');
-        if ($zip->open($tmp, ZipArchive::OVERWRITE) === true) {
-            $zip->addFromString('[Content_Types].xml',
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                . '<Default Extension="xml" ContentType="application/xml"/>'
-                . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-                . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-                . '</Types>');
-            $zip->addFromString('_rels/.rels',
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
-                . '</Relationships>');
-            $zip->addFromString('xl/workbook.xml',
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-                . '<sheets><sheet name="学生名单" sheetId="1" r:id="rId1"/></sheets></workbook>');
-            $zip->addFromString('xl/_rels/workbook.xml.rels',
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
-                . '</Relationships>');
-            $zip->addFromString('xl/worksheets/sheet1.xml',
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
-                . '<row r="1"><c r="A1" t="inlineStr"><is><t>学号</t></is></c><c r="B1" t="inlineStr"><is><t>姓名</t></is></c></row>'
-                . '<row r="2"><c r="A2" t="n"><v>1</v></c><c r="B2" t="inlineStr"><is><t>示例学生</t></is></c></row>'
-                . '<row r="3"><c r="A3" t="n"><v>2</v></c><c r="B3" t="inlineStr"><is><t>示例学生</t></is></c></row>'
-                . '</sheetData></worksheet>');
-            $zip->close();
-            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment; filename="学生名单模板.xlsx"');
-            readfile($tmp);
-            unlink($tmp);
-            exit;
-        }
+    $files = [
+        '[Content_Types].xml' =>
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            . '<Default Extension="xml" ContentType="application/xml"/>'
+            . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '</Types>',
+        '_rels/.rels' =>
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            . '</Relationships>',
+        'xl/workbook.xml' =>
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<sheets><sheet name="学生名单" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        'xl/_rels/workbook.xml.rels' =>
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            . '</Relationships>',
+        'xl/worksheets/sheet1.xml' =>
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="A1" t="inlineStr"><is><t>学号</t></is></c><c r="B1" t="inlineStr"><is><t>姓名</t></is></c></row>'
+            . '<row r="2"><c r="A2" t="n"><v>1</v></c><c r="B2" t="inlineStr"><is><t>示例学生</t></is></c></row>'
+            . '<row r="3"><c r="A3" t="n"><v>2</v></c><c r="B3" t="inlineStr"><is><t>示例学生</t></is></c></row>'
+            . '</sheetData></worksheet>',
+    ];
+
+    $local = '';
+    $central = '';
+    $offset = 0;
+    foreach ($files as $name => $data) {
+        $crc = crc32($data);
+        $size = strlen($data);
+        $nameLen = strlen($name);
+        $local .= pack('VvvvvvVVVvv', 0x04034b50, 20, 0, 0, 0, 0, $crc, $size, $size, $nameLen, 0) . $name . $data;
+        $central .= pack('VvvvvvvVVVvvvvvVV', 0x02014b50, 20, 20, 0, 0, 0, 0, $crc, $size, $size, $nameLen, 0, 0, 0, 0, 0, $offset) . $name;
+        $offset += 30 + $nameLen + $size;
     }
-    // 兜底：CSV 模板
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="学生名单模板.csv"');
-    echo "\xEF\xBB\xBF学号,姓名\n1,示例学生\n2,示例学生\n";
+    $cdSize = strlen($central);
+    $eocd = pack('VvvvvVVv', 0x06054b50, 0, 0, count($files), count($files), $cdSize, $offset, 0);
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="学生名单模板.xlsx"');
+    echo $local . $central . $eocd;
     exit;
 }
-?>
