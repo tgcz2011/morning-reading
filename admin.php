@@ -210,7 +210,8 @@ $classes = getAllClasses();
                                 <td><button type="submit" class="admin-btn small">保存修改</button></td>
                             </form>
                             <td>
-                                <form method="POST" class="admin-inline-form" onsubmit="return confirmDeleteStudent('<?php echo htmlspecialchars($s['name'], ENT_QUOTES); ?>');">
+                                <form method="POST" class="admin-inline-form"
+                                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '删除学生', '确定删除「<?php echo htmlspecialchars($s['name']); ?>」吗？其全部记录也会一并删除。');">
                                     <input type="hidden" name="action" value="delete_student">
                                     <input type="hidden" name="student_id" value="<?php echo $s['id']; ?>">
                                     <button type="submit" class="admin-btn small danger">删除</button>
@@ -249,7 +250,8 @@ $classes = getAllClasses();
                             <td><?php echo $c['record_count']; ?></td>
                             <td><?php echo $c['penalty_count']; ?></td>
                             <td>
-                                <form method="POST" class="admin-inline-form" onsubmit="return confirmClearData('<?php echo getClassName($c['class_number']); ?>');">
+                                <form method="POST" class="admin-inline-form"
+                                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo getClassName($c['class_number']); ?>」的全部记录数据吗？此操作不可恢复。');">
                                     <input type="hidden" name="action" value="clear_data">
                                     <input type="hidden" name="class_id" value="<?php echo $c['id']; ?>">
                                     <button type="submit" class="admin-btn small danger">清空该班全部数据</button>
@@ -290,16 +292,9 @@ $classes = getAllClasses();
             if (e.target === e.currentTarget) hideAsk();
         });
 
-        async function confirmDeleteStudent(name) {
-            const ok = await askConfirm('删除学生', '确定删除「' + name + '」吗？其全部记录也会一并删除。');
-            if (!ok) return false;
-            return true;
-        }
-
-        async function confirmClearData(className) {
-            const ok = await askConfirm('清空数据', '确定清空「' + className + '」的全部记录数据吗？此操作不可恢复。');
-            if (!ok) return false;
-            return true;
+        async function confirmAndSubmit(form, title, desc) {
+            const ok = await askConfirm(title, desc);
+            if (ok) form.submit();
         }
     </script>
 
