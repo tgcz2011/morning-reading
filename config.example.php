@@ -12,8 +12,8 @@ define('DB_PASS', '请填写数据库密码');
 define('DB_NAME', '请填写数据库名');
 define('DB_PORT', 3306);
 
-// 教师管理密码（登录 admin.php 使用）
-define('ADMIN_PASSWORD', '请填写管理密码');
+// 总管理密码（登录 edit.php 使用；edit.php 无任何入口链接，纯背网址访问）
+define('SUPERADMIN_PASSWORD', '请填写总管理密码');
 
 // 班级数量：自动创建 1~CLASS_COUNT 个班
 // 初始密码 = admin + 两位班级号（一班=admin01，二班=admin02，以此类推）
@@ -82,13 +82,25 @@ function getSemesterStart($date = null) {
 function initDatabase() {
     $pdo = getDB();
 
-    // 班级表
+    // 班级表（password=班级密码，teacher_password=教师管理密码，两者分开但初始相同）
     $pdo->exec("CREATE TABLE IF NOT EXISTS classes (
         id INT AUTO_INCREMENT PRIMARY KEY,
         class_number INT NOT NULL UNIQUE,
         password VARCHAR(64) NOT NULL,
+        teacher_password VARCHAR(64) NOT NULL DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // 迁移：老库 classes 表没有 teacher_password 列时补列，初始值 = 班级密码
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM classes")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('teacher_password', $cols)) {
+            $pdo->exec("ALTER TABLE classes ADD COLUMN teacher_password VARCHAR(64) NOT NULL DEFAULT ''");
+            $pdo->exec("UPDATE classes SET teacher_password = password");
+        }
+    } catch (PDOException $e) {
+        // 表不存在时忽略（上面已建表）
+    }
 
     // 学生表（姓名 base64 转码后存 name_encoded）
     $pdo->exec("CREATE TABLE IF NOT EXISTS students (
@@ -140,10 +152,11 @@ function initDatabase() {
         INDEX idx_class_student_week (class_id, student_id, week_number)
     ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // 种子：创建 1~CLASS_COUNT 个班，初始密码 admin + 两位班级号
+    // 种子：创建 1~CLASS_COUNT 个班，班级密码与教师管理密码初始相同 = admin + 两位班级号
     for ($n = 1; $n <= CLASS_COUNT; $n++) {
-        $stmt = $pdo->prepare("INSERT IGNORE INTO classes (class_number, password) VALUES (?, ?)");
-        $stmt->execute([$n, 'admin' . str_pad($n, 2, '0', STR_PAD_LEFT)]);
+        $initial_pwd = 'admin' . str_pad($n, 2, '0', STR_PAD_LEFT);
+        $stmt = $pdo->prepare("INSERT IGNORE INTO classes (class_number, password, teacher_password) VALUES (?, ?, ?)");
+        $stmt->execute([$n, $initial_pwd, $initial_pwd]);
     }
 
     // 种子：四班预置默认学生名单（其他班由老师在管理界面添加）

@@ -2,17 +2,18 @@
 require_once 'functions.php';
 initDatabase();
 
-// ================= 教师登录 =================
-if (isset($_POST['admin_login'])) {
-    if (adminLogin($_POST['password'])) {
+// ================= 教师登录（班级号 + 教师管理密码） =================
+if (isset($_POST['teacher_login'])) {
+    $class_number = isset($_POST['class_number']) ? (int)$_POST['class_number'] : 0;
+    if (teacherLogin($class_number, $_POST['password'])) {
         header('Location: admin.php');
         exit;
     } else {
-        $error = "管理密码错误";
+        $error = "班级或教师管理密码错误";
     }
 }
 
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !== true) {
     ?>
     <!DOCTYPE html>
     <html lang="zh-CN">
@@ -27,19 +28,24 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <div class="header">
                 <div class="header-title">
                     <h1>教师管理</h1>
-                    <span class="session-seal">管理</span>
+                    <span class="session-seal">教师</span>
                 </div>
             </div>
             <div class="login-form">
-                <h2>请输入教师管理密码</h2>
+                <h2>选择班级并输入教师管理密码</h2>
                 <?php if (isset($error)): ?>
                     <div class="message error"><?php echo $error; ?></div>
                 <?php endif; ?>
                 <form method="POST">
-                    <input type="password" name="password" placeholder="管理密码" required>
-                    <button type="submit" name="admin_login">进入管理</button>
+                    <select name="class_number" class="login-select">
+                        <?php for ($n = 1; $n <= CLASS_COUNT; $n++): ?>
+                            <option value="<?php echo $n; ?>"><?php echo chineseNumber($n) . '班'; ?></option>
+                        <?php endfor; ?>
+                    </select>
+                    <input type="password" name="password" placeholder="教师管理密码" required>
+                    <button type="submit" name="teacher_login">进入管理</button>
                 </form>
-                <p class="login-hint">管理密码在 config.php 的 ADMIN_PASSWORD 中设置</p>
+                <p class="login-hint">教师管理密码与班级登录密码分开，初始相同（admin + 班级号）<br>忘记密码可联系总管理重置</p>
             </div>
         </div>
     </body>
@@ -48,26 +54,29 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     exit;
 }
 
-// ================= 处理管理操作 =================
-$tab = isset($_GET['tab']) ? $_GET['tab'] : 'classes';
-$sel_class = isset($_GET['class']) ? (int)$_GET['class'] : 1;
+// ================= 处理教师操作（仅限本班） =================
+$teacher_class_id = getTeacherClassId();
+$teacher_class_number = getTeacherClassNumber();
+$tab = isset($_GET['tab']) ? $_GET['tab'] : 'students';
 
 if (isset($_POST['action'])) {
     $action = $_POST['action'];
-    $redirect = 'admin.php?tab=' . $tab . '&class=' . $sel_class;
+    $redirect = 'admin.php?tab=' . $tab;
 
-    if ($action === 'change_password' && isset($_POST['class_id'], $_POST['new_password'])) {
-        $r = updateClassPassword((int)$_POST['class_id'], $_POST['new_password']);
-    } elseif ($action === 'add_student' && isset($_POST['class_id'], $_POST['student_no'], $_POST['name'])) {
-        $r = addStudent((int)$_POST['class_id'], $_POST['student_no'], $_POST['name']);
+    if ($action === 'change_class_password' && isset($_POST['new_password'])) {
+        $r = updateClassPassword($teacher_class_id, $_POST['new_password']);
+    } elseif ($action === 'change_teacher_password' && isset($_POST['new_password'])) {
+        $r = updateTeacherPassword($teacher_class_id, $_POST['new_password']);
+    } elseif ($action === 'add_student' && isset($_POST['student_no'], $_POST['name'])) {
+        $r = addStudent($teacher_class_id, $_POST['student_no'], $_POST['name']);
     } elseif ($action === 'update_student' && isset($_POST['student_id'], $_POST['name'])) {
         $r = updateStudent((int)$_POST['student_id'], $_POST['name'], isset($_POST['student_no']) ? $_POST['student_no'] : null);
     } elseif ($action === 'delete_student' && isset($_POST['student_id'])) {
         $r = deleteStudent((int)$_POST['student_id']);
-    } elseif ($action === 'clear_data' && isset($_POST['class_id'])) {
-        $r = clearClassData((int)$_POST['class_id']);
-    } elseif ($action === 'admin_logout') {
-        unset($_SESSION['admin_logged_in']);
+    } elseif ($action === 'clear_data') {
+        $r = clearClassData($teacher_class_id);
+    } elseif ($action === 'teacher_logout') {
+        unset($_SESSION['teacher_logged_in'], $_SESSION['teacher_class_id'], $_SESSION['teacher_class_number']);
         header('Location: admin.php');
         exit;
     } else {
@@ -89,14 +98,18 @@ if (isset($_SESSION['admin_msg'])) {
     unset($_SESSION['admin_msg_type']);
 }
 
-$classes = getAllClasses();
+// 获取本班信息与学生
+$stmt = getDB()->prepare("SELECT * FROM classes WHERE id = ?");
+$stmt->execute([$teacher_class_id]);
+$class_info = $stmt->fetch();
+$students = getStudents($teacher_class_id);
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教师管理 - 班级朗读记录系统</title>
+    <title>教师管理 - <?php echo getClassName($teacher_class_number); ?></title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -104,7 +117,7 @@ $classes = getAllClasses();
         <div class="header">
             <div class="header-title">
                 <h1>教师管理</h1>
-                <span class="session-seal">管理</span>
+                <span class="session-seal"><?php echo getClassName($teacher_class_number); ?></span>
             </div>
             <div class="time-info"><?php echo date('Y年m月d日 H:i'); ?></div>
         </div>
@@ -112,12 +125,12 @@ $classes = getAllClasses();
         <div class="nav-bar">
             <a href="index.php" class="nav-btn">记录页面</a>
             <a href="stats.php" class="nav-btn">统计页面</a>
-            <a href="admin.php?tab=classes" class="nav-btn <?php echo $tab === 'classes' ? 'active' : ''; ?>">班级密码</a>
-            <a href="admin.php?tab=students&class=<?php echo $sel_class; ?>" class="nav-btn <?php echo $tab === 'students' ? 'active' : ''; ?>">学生名单</a>
-            <a href="admin.php?tab=data" class="nav-btn <?php echo $tab === 'data' ? 'active' : ''; ?>">班级数据</a>
+            <a href="admin.php?tab=students" class="nav-btn <?php echo $tab === 'students' ? 'active' : ''; ?>">学生名单</a>
+            <a href="admin.php?tab=passwords" class="nav-btn <?php echo $tab === 'passwords' ? 'active' : ''; ?>">本班密码</a>
+            <a href="admin.php?tab=data" class="nav-btn <?php echo $tab === 'data' ? 'active' : ''; ?>">数据管理</a>
             <form method="POST" style="margin:0;padding:0;display:inline;">
-                <input type="hidden" name="action" value="admin_logout">
-                <button type="submit" class="nav-btn nav-logout">退出管理</button>
+                <input type="hidden" name="action" value="teacher_logout">
+                <button type="submit" class="nav-btn nav-logout">退出</button>
             </form>
         </div>
 
@@ -126,65 +139,16 @@ $classes = getAllClasses();
         <?php endif; ?>
 
         <div class="admin-body">
-            <?php if ($tab === 'classes'): ?>
-                <!-- ========== 班级密码管理 ========== -->
-                <h2 class="stats-title">班级密码管理</h2>
-                <div class="stats-note"><strong>初始密码：</strong><span>admin + 两位班级号（一班 = admin01）。修改后立即生效。</span></div>
-                <table class="ranking-table">
-                    <thead>
-                        <tr>
-                            <th width="12%">班级</th>
-                            <th width="12%">当前密码</th>
-                            <th width="16%">学生数</th>
-                            <th width="14%">记录数</th>
-                            <th width="14%">扣分数</th>
-                            <th width="32%">新密码</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($classes as $c): ?>
-                        <tr>
-                            <td><?php echo getClassName($c['class_number']); ?></td>
-                            <td><code class="pwd-show"><?php echo htmlspecialchars($c['password']); ?></code></td>
-                            <td><?php echo $c['student_count']; ?></td>
-                            <td><?php echo $c['record_count']; ?></td>
-                            <td><?php echo $c['penalty_count']; ?></td>
-                            <td>
-                                <form method="POST" class="admin-inline-form">
-                                    <input type="hidden" name="action" value="change_password">
-                                    <input type="hidden" name="class_id" value="<?php echo $c['id']; ?>">
-                                    <input type="text" name="new_password" class="admin-input" placeholder="新密码（至少4位）" required>
-                                    <button type="submit" class="admin-btn small">保存</button>
-                                </form>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-
-            <?php elseif ($tab === 'students'): ?>
-                <!-- ========== 学生名单管理 ========== -->
+            <?php if ($tab === 'students'): ?>
+                <!-- ========== 学生名单管理（本班） ========== -->
                 <h2 class="stats-title">学生名单管理</h2>
-                <div class="period-selector">
-                    <?php foreach ($classes as $c): ?>
-                        <a href="admin.php?tab=students&class=<?php echo $c['id']; ?>"
-                           class="period-btn <?php echo $sel_class == $c['id'] ? 'active' : ''; ?>"><?php echo getClassName($c['class_number']); ?></a>
-                    <?php endforeach; ?>
-                </div>
-
-                <?php
-                $sel_students = getStudents($sel_class);
-                $sel_class_info = null;
-                foreach ($classes as $c) { if ($c['id'] == $sel_class) $sel_class_info = $c; }
-                ?>
                 <div class="stats-note">
-                    <strong><?php echo getClassName($sel_class_info['class_number']); ?>：</strong>
-                    <span>共 <?php echo count($sel_students); ?> 名学生（姓名自动转码存储，不受数据库中文编码限制）</span>
+                    <strong><?php echo getClassName($teacher_class_number); ?>：</strong>
+                    <span>共 <?php echo count($students); ?> 名学生（姓名自动转码存储，不受数据库中文编码限制）</span>
                 </div>
 
                 <form method="POST" class="admin-add-form">
                     <input type="hidden" name="action" value="add_student">
-                    <input type="hidden" name="class_id" value="<?php echo $sel_class; ?>">
                     <input type="number" name="student_no" class="admin-input" placeholder="学号" min="1" required>
                     <input type="text" name="name" class="admin-input" placeholder="姓名" required>
                     <button type="submit" class="admin-btn solid">添加学生</button>
@@ -200,7 +164,7 @@ $classes = getAllClasses();
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($sel_students as $s): ?>
+                        <?php foreach ($students as $s): ?>
                         <tr>
                             <form method="POST" class="admin-inline-form">
                                 <input type="hidden" name="action" value="update_student">
@@ -219,54 +183,62 @@ $classes = getAllClasses();
                             </td>
                         </tr>
                         <?php endforeach; ?>
-                        <?php if (empty($sel_students)): ?>
+                        <?php if (empty($students)): ?>
                         <tr><td colspan="4" style="text-align:center;padding:26px;color:var(--ink-faint);">本班暂无学生，请在上方添加</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
 
-            <?php elseif ($tab === 'data'): ?>
-                <!-- ========== 班级数据管理 ========== -->
-                <h2 class="stats-title">班级数据管理</h2>
+            <?php elseif ($tab === 'passwords'): ?>
+                <!-- ========== 本班密码管理 ========== -->
+                <h2 class="stats-title">本班密码管理</h2>
                 <div class="stats-note">
-                    <strong>清空数据：</strong>
-                    <span>删除该班全部朗读记录、扣分与统计（保留班级和名单），操作不可恢复。</span>
+                    <strong>班级密码：</strong><span>学生 / 班干部登录记录页使用</span><br>
+                    <strong>教师管理密码：</strong><span>老师登录本管理界面使用；两者分开，可分别修改</span>
                 </div>
                 <table class="ranking-table">
-                    <thead>
-                        <tr>
-                            <th width="16%">班级</th>
-                            <th width="16%">学生数</th>
-                            <th width="16%">记录数</th>
-                            <th width="16%">扣分数</th>
-                            <th width="36%">操作</th>
-                        </tr>
-                    </thead>
                     <tbody>
-                        <?php foreach ($classes as $c): ?>
                         <tr>
-                            <td><?php echo getClassName($c['class_number']); ?></td>
-                            <td><?php echo $c['student_count']; ?></td>
-                            <td><?php echo $c['record_count']; ?></td>
-                            <td><?php echo $c['penalty_count']; ?></td>
+                            <td width="20%"><strong>班级密码</strong><br><code class="pwd-show"><?php echo htmlspecialchars($class_info['password']); ?></code></td>
                             <td>
-                                <form method="POST" class="admin-inline-form"
-                                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo getClassName($c['class_number']); ?>」的全部记录数据吗？此操作不可恢复。');">
-                                    <input type="hidden" name="action" value="clear_data">
-                                    <input type="hidden" name="class_id" value="<?php echo $c['id']; ?>">
-                                    <button type="submit" class="admin-btn small danger">清空该班全部数据</button>
+                                <form method="POST" class="admin-inline-form">
+                                    <input type="hidden" name="action" value="change_class_password">
+                                    <input type="text" name="new_password" class="admin-input" placeholder="新班级密码（至少4位）" required>
+                                    <button type="submit" class="admin-btn small">保存</button>
                                 </form>
                             </td>
                         </tr>
-                        <?php endforeach; ?>
+                        <tr>
+                            <td width="20%"><strong>教师管理密码</strong><br><code class="pwd-show"><?php echo htmlspecialchars($class_info['teacher_password']); ?></code></td>
+                            <td>
+                                <form method="POST" class="admin-inline-form">
+                                    <input type="hidden" name="action" value="change_teacher_password">
+                                    <input type="text" name="new_password" class="admin-input" placeholder="新教师管理密码（至少4位）" required>
+                                    <button type="submit" class="admin-btn small">保存</button>
+                                </form>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
+
+            <?php elseif ($tab === 'data'): ?>
+                <!-- ========== 本班数据管理 ========== -->
+                <h2 class="stats-title">数据管理</h2>
+                <div class="stats-note">
+                    <strong>清空数据：</strong>
+                    <span>删除本班全部朗读记录、扣分与统计（保留班级和名单），操作不可恢复。</span>
+                </div>
+                <form method="POST" class="admin-inline-form"
+                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo getClassName($teacher_class_number); ?>」的全部记录数据吗？此操作不可恢复。');">
+                    <input type="hidden" name="action" value="clear_data">
+                    <button type="submit" class="admin-btn small danger">清空本班全部数据</button>
+                </form>
             <?php endif; ?>
         </div>
     </div>
 
     <script>
-        // 删除学生 / 清空数据前的确认（自绘弹窗，不用浏览器 confirm）
+        // 自绘确认弹窗
         let confirmOkCallback = null;
 
         function askConfirm(title, desc) {
@@ -298,7 +270,6 @@ $classes = getAllClasses();
         }
     </script>
 
-    <!-- 自绘确认弹窗 -->
     <div class="modal-overlay" id="adminModalOverlay" hidden>
         <div class="modal-card">
             <div class="modal-stamp" id="adminModalStamp">!</div>

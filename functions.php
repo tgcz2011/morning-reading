@@ -15,15 +15,23 @@ function checkAuth() {
     }
 }
 
-// 检查教师管理登录状态
+// 检查教师管理登录状态（教师只能管理自己所在班级）
 function checkAdminAuth() {
-    if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !== true || empty($_SESSION['teacher_class_id'])) {
         header('Location: admin.php');
         exit;
     }
 }
 
-// 班级登录（班级号 + 密码）
+// 检查总管理（superadmin）登录状态
+function checkSuperAuth() {
+    if (!isset($_SESSION['super_logged_in']) || $_SESSION['super_logged_in'] !== true) {
+        header('Location: edit.php');
+        exit;
+    }
+}
+
+// 班级登录（班级号 + 班级密码）
 function login($class_number, $password) {
     $pdo = getDB();
     $stmt = $pdo->prepare("SELECT * FROM classes WHERE class_number = ?");
@@ -38,10 +46,25 @@ function login($class_number, $password) {
     return false;
 }
 
-// 教师管理登录
-function adminLogin($password) {
-    if (hash_equals(ADMIN_PASSWORD, $password)) {
-        $_SESSION['admin_logged_in'] = true;
+// 教师管理登录（班级号 + 教师管理密码）
+function teacherLogin($class_number, $password) {
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT * FROM classes WHERE class_number = ?");
+    $stmt->execute([(int)$class_number]);
+    $class = $stmt->fetch();
+    if ($class && !empty($class['teacher_password']) && hash_equals($class['teacher_password'], $password)) {
+        $_SESSION['teacher_logged_in'] = true;
+        $_SESSION['teacher_class_id'] = (int)$class['id'];
+        $_SESSION['teacher_class_number'] = (int)$class['class_number'];
+        return true;
+    }
+    return false;
+}
+
+// 总管理登录（edit.php，使用 config 中的 SUPERADMIN_PASSWORD）
+function superLogin($password) {
+    if (hash_equals(SUPERADMIN_PASSWORD, $password)) {
+        $_SESSION['super_logged_in'] = true;
         return true;
     }
     return false;
@@ -54,6 +77,15 @@ function getClassId() {
 
 function getClassNumber() {
     return (int)$_SESSION['class_number'];
+}
+
+// 教师当前管理的班级 ID / 班号
+function getTeacherClassId() {
+    return (int)$_SESSION['teacher_class_id'];
+}
+
+function getTeacherClassNumber() {
+    return (int)$_SESSION['teacher_class_number'];
 }
 
 function getClassName($number = null) {
@@ -516,10 +548,10 @@ function getPositiveStatistics($period = 'week') {
 // 教师管理操作
 // ============================================================
 
-// 获取全部班级
+// 获取全部班级（含教师管理密码，供总管理 edit.php 使用）
 function getAllClasses() {
     $pdo = getDB();
-    $stmt = $pdo->query("SELECT c.id, c.class_number, c.password,
+    $stmt = $pdo->query("SELECT c.id, c.class_number, c.password, c.teacher_password,
                          (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id) AS student_count,
                          (SELECT COUNT(*) FROM reading_records r WHERE r.class_id = c.id AND r.is_canceled = FALSE) AS record_count,
                          (SELECT COUNT(*) FROM penalty_records p WHERE p.class_id = c.id) AS penalty_count
@@ -535,7 +567,18 @@ function updateClassPassword($class_id, $new_password) {
     $pdo = getDB();
     $stmt = $pdo->prepare("UPDATE classes SET password = ? WHERE id = ?");
     $stmt->execute([$new_password, (int)$class_id]);
-    return ['success' => true, 'message' => '密码已修改'];
+    return ['success' => true, 'message' => '班级密码已修改'];
+}
+
+// 修改教师管理密码
+function updateTeacherPassword($class_id, $new_password) {
+    if (strlen($new_password) < 4) {
+        return ['success' => false, 'message' => '密码至少 4 位'];
+    }
+    $pdo = getDB();
+    $stmt = $pdo->prepare("UPDATE classes SET teacher_password = ? WHERE id = ?");
+    $stmt->execute([$new_password, (int)$class_id]);
+    return ['success' => true, 'message' => '教师管理密码已修改'];
 }
 
 // 添加学生
