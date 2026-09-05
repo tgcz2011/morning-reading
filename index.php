@@ -21,7 +21,20 @@ if (isset($_POST['login'])) {
 }
 
 // 检查登录状态
+// 记录页登录有效期 3 小时：过期即清除登录态回到登录页
+if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true &&
+    (!isset($_SESSION['login_time']) || time() - $_SESSION['login_time'] > 3 * 3600)) {
+    session_unset();
+    session_destroy();
+}
+
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($_SESSION['class_id'])) {
+    // AJAX 请求未登录/过期时返回 JSON，避免前端拿到整页登录 HTML
+    if (isset($_POST['ajax_action'])) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => '登录已过期，请重新登录']);
+        exit;
+    }
     ?>
     <!DOCTYPE html>
     <html lang="zh-CN">
@@ -40,20 +53,16 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($
                 </div>
             </div>
             <div class="login-form">
-                <h2>选择班级并输入密码</h2>
+                <h2>输入班级号并登录</h2>
                 <?php if (isset($error)): ?>
                     <div class="message error"><?php echo $error; ?></div>
                 <?php endif; ?>
                 <form method="POST">
-                    <select name="class_number" class="login-select">
-                        <?php for ($n = 1; $n <= CLASS_COUNT; $n++): ?>
-                            <option value="<?php echo $n; ?>"><?php echo chineseNumber($n) . '班'; ?></option>
-                        <?php endfor; ?>
-                    </select>
+                    <input type="number" name="class_number" class="login-input" placeholder="班级号，如 01" min="1" max="<?php echo CLASS_COUNT; ?>" required>
                     <input type="password" name="password" placeholder="班级密码" required>
                     <button type="submit" name="login">登录</button>
                 </form>
-                <p class="login-hint">初始密码：admin + 班级号（一班 = admin01）<br>密码可在教师管理界面修改</p>
+                <p class="login-hint">班级号用数字：一班 = 01，二班 = 02，以此类推<br>初始密码：admin + 班级号（一班 = admin01）<br>密码可在教师管理界面修改</p>
             </div>
         </div>
     </body>
@@ -140,7 +149,7 @@ $students = getStudents();
 
         <?php if (!canRecord()): ?>
             <div class="time-restriction">
-                <strong>注意：</strong>当前不在记录时间段内（早读：6:20-7:10，晚读：17:45-18:20）
+                <strong>注意：</strong>当前不在记录时间段内（<?php echo getPeriodRangeText(); ?>）
             </div>
         <?php endif; ?>
 

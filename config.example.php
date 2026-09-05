@@ -152,6 +152,21 @@ function initDatabase() {
         INDEX idx_class_student_week (class_id, student_id, week_number)
     ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // 全局设置表（早晚读时间段等，可在总管理界面修改）
+    $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
+        setting_key VARCHAR(64) PRIMARY KEY,
+        setting_value VARCHAR(255) NOT NULL
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $stmt = $pdo->prepare("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)");
+    foreach ([
+        'morning_start' => '06:20',
+        'morning_end'   => '07:10',
+        'evening_start' => '17:45',
+        'evening_end'   => '18:20',
+    ] as $k => $v) {
+        $stmt->execute([$k, $v]);
+    }
+
     // 种子：创建 1~CLASS_COUNT 个班，班级密码与教师管理密码初始相同 = admin + 两位班级号
     for ($n = 1; $n <= CLASS_COUNT; $n++) {
         $initial_pwd = 'admin' . str_pad($n, 2, '0', STR_PAD_LEFT);

@@ -198,6 +198,32 @@ body {
     box-shadow: 0 0 0 3px rgba(196,58,44,.12);
 }
 
+.login-input {
+    width: 100%;
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    font-size: 1rem;
+    text-align: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #FFFFFF;
+    color: var(--ink);
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+}
+
+.login-input:focus {
+    border-color: var(--vermilion);
+    box-shadow: 0 0 0 3px rgba(196,58,44,.12);
+}
+
+.admin-field-label {
+    font-size: .85rem;
+    color: var(--ink-soft);
+    min-width: 70px;
+    padding-top: 10px;
+}
+
 .login-hint {
     margin-top: 16px;
     font-size: .8rem;

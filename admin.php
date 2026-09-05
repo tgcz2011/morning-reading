@@ -18,6 +18,13 @@ if (isset($_POST['teacher_login'])) {
     }
 }
 
+// 教师登录有效期 7 天：过期即清除登录态回到登录页
+if (isset($_SESSION['teacher_logged_in']) && $_SESSION['teacher_logged_in'] === true &&
+    (!isset($_SESSION['teacher_login_time']) || time() - $_SESSION['teacher_login_time'] > 7 * 86400)) {
+    session_unset();
+    session_destroy();
+}
+
 if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !== true) {
     ?>
     <!DOCTYPE html>
@@ -37,20 +44,16 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
                 </div>
             </div>
             <div class="login-form">
-                <h2>选择班级并输入教师管理密码</h2>
+                <h2>输入班级号并输入教师管理密码</h2>
                 <?php if (isset($error)): ?>
                     <div class="message error"><?php echo $error; ?></div>
                 <?php endif; ?>
                 <form method="POST">
-                    <select name="class_number" class="login-select">
-                        <?php for ($n = 1; $n <= CLASS_COUNT; $n++): ?>
-                            <option value="<?php echo $n; ?>"><?php echo chineseNumber($n) . '班'; ?></option>
-                        <?php endfor; ?>
-                    </select>
+                    <input type="number" name="class_number" class="login-input" placeholder="班级号，如 01" min="1" max="<?php echo CLASS_COUNT; ?>" required>
                     <input type="password" name="password" placeholder="教师管理密码" required>
                     <button type="submit" name="teacher_login">进入管理</button>
                 </form>
-                <p class="login-hint">教师管理密码与班级登录密码分开，初始相同（admin + 班级号）<br>忘记密码可联系总管理重置</p>
+                <p class="login-hint">班级号用数字：一班 = 01，二班 = 02，以此类推<br>教师管理密码与班级登录密码分开，初始相同（admin + 班级号）<br>忘记密码可联系总管理重置</p>
             </div>
         </div>
     </body>

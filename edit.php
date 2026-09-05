@@ -73,6 +73,9 @@ if (isset($_POST['action'])) {
         $r = deleteStudent((int)$_POST['student_id']);
     } elseif ($action === 'clear_data' && isset($_POST['class_id'])) {
         $r = clearClassData((int)$_POST['class_id']);
+    } elseif ($action === 'update_period_settings' && isset($_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end'])) {
+        $r = updatePeriodSettings($_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end']);
+        $redirect = 'edit.php?tab=settings';
     } elseif ($action === 'preview_import') {
         // 第一步：上传 Excel → 解析 → 存入会话待确认
         $parsed = parseStudentFile(isset($_FILES['csv_file']) ? $_FILES['csv_file'] : null);
@@ -148,6 +151,7 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
         <div class="nav-bar">
             <a href="edit.php?tab=classes" class="nav-btn <?php echo $tab === 'classes' ? 'active' : ''; ?>">班级与密码</a>
             <a href="edit.php?tab=students&class=<?php echo $sel_class; ?>" class="nav-btn <?php echo $tab === 'students' ? 'active' : ''; ?>">学生名单</a>
+            <a href="edit.php?tab=settings" class="nav-btn <?php echo $tab === 'settings' ? 'active' : ''; ?>">时段设置</a>
             <a href="edit.php?tab=data" class="nav-btn <?php echo $tab === 'data' ? 'active' : ''; ?>">数据管理</a>
             <form method="POST" style="margin:0;padding:0;display:inline;">
                 <input type="hidden" name="action" value="super_logout">
@@ -313,6 +317,29 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                         <?php endif; ?>
                     </tbody>
                 </table>
+
+            <?php elseif ($tab === 'settings'): ?>
+                <!-- ========== 早晚读时间段设置 ========== -->
+                <?php $ps = getPeriodSettings(); ?>
+                <h2 class="stats-title">早晚读时间段设置</h2>
+                <div class="stats-note">
+                    <strong>说明：</strong>修改后立即对所有班级的首页与记录接口生效；早读/晚读各自"开始"必须早于"结束"。
+                </div>
+                <form method="POST" class="admin-add-form" style="max-width:520px;flex-wrap:wrap;gap:10px;">
+                    <input type="hidden" name="action" value="update_period_settings">
+                    <label class="admin-field-label">早读开始</label>
+                    <input type="time" name="morning_start" class="admin-input" value="<?php echo $ps['morning_start']; ?>" required>
+                    <label class="admin-field-label">早读结束</label>
+                    <input type="time" name="morning_end" class="admin-input" value="<?php echo $ps['morning_end']; ?>" required>
+                    <label class="admin-field-label">晚读开始</label>
+                    <input type="time" name="evening_start" class="admin-input" value="<?php echo $ps['evening_start']; ?>" required>
+                    <label class="admin-field-label">晚读结束</label>
+                    <input type="time" name="evening_end" class="admin-input" value="<?php echo $ps['evening_end']; ?>" required>
+                    <button type="submit" class="admin-btn solid" style="width:100%;margin-top:6px;">保存时段设置</button>
+                </form>
+                <div class="stats-note" style="margin-top:10px;">
+                    当前配置：<?php echo getPeriodRangeText(); ?>
+                </div>
 
             <?php elseif ($tab === 'data'): ?>
                 <!-- ========== 任意班级数据清空 ========== -->

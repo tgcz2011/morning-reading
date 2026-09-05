@@ -13,11 +13,29 @@ function checkAuth() {
         header('Location: index.php');
         exit;
     }
+    // 记录页登录有效期 3 小时
+    if (!isset($_SESSION['login_time']) || time() - $_SESSION['login_time'] > 3 * 3600) {
+        session_unset();
+        session_destroy();
+        if (isset($_POST['ajax_action'])) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => '登录已过期，请重新登录']);
+            exit;
+        }
+        header('Location: index.php');
+        exit;
+    }
 }
 
-// 检查教师管理登录状态（教师只能管理自己所在班级）
+// 检查教师管理登录状态（教师只能管理自己所在班级；有效期 7 天）
 function checkAdminAuth() {
     if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !== true || empty($_SESSION['teacher_class_id'])) {
+        header('Location: admin.php');
+        exit;
+    }
+    if (!isset($_SESSION['teacher_login_time']) || time() - $_SESSION['teacher_login_time'] > 7 * 86400) {
+        session_unset();
+        session_destroy();
         header('Location: admin.php');
         exit;
     }
@@ -41,6 +59,7 @@ function login($class_number, $password) {
         $_SESSION['logged_in'] = true;
         $_SESSION['class_id'] = (int)$class['id'];
         $_SESSION['class_number'] = (int)$class['class_number'];
+        $_SESSION['login_time'] = time(); // 记录页登录有效期 3 小时
         return true;
     }
     return false;
@@ -56,6 +75,7 @@ function teacherLogin($class_number, $password) {
         $_SESSION['teacher_logged_in'] = true;
         $_SESSION['teacher_class_id'] = (int)$class['id'];
         $_SESSION['teacher_class_number'] = (int)$class['class_number'];
+        $_SESSION['teacher_login_time'] = time(); // 教师页登录有效期 7 天
         return true;
     }
     return false;
@@ -124,23 +144,78 @@ function getStudentMap($class_id = null) {
 // 时间与时段
 // ============================================================
 
-// 检查是否在可记录时间段内
+// 读取时段配置（settings 表，带默认值兜底；可在总管理界面修改）
+function getPeriodSettings() {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $defaults = [
+        'morning_start' => '06:20',
+        'morning_end'   => '07:10',
+        'evening_start' => '17:45',
+        'evening_end'   => '18:20',
+    ];
+    try {
+        $rows = getDB()->query("SELECT setting_key, setting_value FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+        foreach ($defaults as $k => $v) {
+            if (isset($rows[$k]) && preg_match('/^\d{1,2}:\d{2}$/', $rows[$k])) {
+                $defaults[$k] = $rows[$k];
+            }
+        }
+    } catch (PDOException $e) {
+        // settings 表不存在时用默认值（initDatabase 会创建）
+    }
+    $cache = $defaults;
+    return $cache;
+}
+
+// 校验并保存时段配置（HH:MM，开始必须早于结束）
+function updatePeriodSettings($morning_start, $morning_end, $evening_start, $evening_end) {
+    $fields = [
+        'morning_start' => trim($morning_start),
+        'morning_end'   => trim($morning_end),
+        'evening_start' => trim($evening_start),
+        'evening_end'   => trim($evening_end),
+    ];
+    foreach ($fields as $k => $v) {
+        if (!preg_match('/^\d{1,2}:\d{2}$/', $v)) {
+            return ['success' => false, 'message' => $k . ' 时间格式错误（应为 HH:MM，如 06:20）'];
+        }
+    }
+    $toMin = function ($t) { list($h, $m) = explode(':', $t); return (int)$h * 60 + (int)$m; };
+    if ($toMin($fields['morning_start']) >= $toMin($fields['morning_end'])) {
+        return ['success' => false, 'message' => '早读开始时间必须早于结束时间'];
+    }
+    if ($toMin($fields['evening_start']) >= $toMin($fields['evening_end'])) {
+        return ['success' => false, 'message' => '晚读开始时间必须早于结束时间'];
+    }
+    $pdo = getDB();
+    $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+    foreach ($fields as $k => $v) {
+        $stmt->execute([$k, $v]);
+    }
+    return ['success' => true, 'message' => '时段设置已保存，首页与记录接口即时生效'];
+}
+
+// 时间段展示文案（供首页提示使用）
+function getPeriodRangeText() {
+    $s = getPeriodSettings();
+    return '早读：' . $s['morning_start'] . '-' . $s['morning_end'] . '，晚读：' . $s['evening_start'] . '-' . $s['evening_end'];
+}
+
+// 检查是否在可记录时间段内（时间来自 settings 配置）
 function canRecord() {
-    $current_hour = (int)date('H');
-    $current_minute = (int)date('i');
-
-    // 早读时间: 6:20-7:10
-    $morning_start = 6 * 60 + 20;
-    $morning_end = 7 * 60 + 10;
-
-    // 晚读时间: 17:45-18:20
-    $evening_start = 17 * 60 + 45;
-    $evening_end = 18 * 60 + 20;
-
-    $current_minutes = $current_hour * 60 + $current_minute;
-
-    return ($current_minutes >= $morning_start && $current_minutes <= $morning_end) ||
-           ($current_minutes >= $evening_start && $current_minutes <= $evening_end);
+    $current_minutes = (int)date('H') * 60 + (int)date('i');
+    $s = getPeriodSettings();
+    list($h, $m) = explode(':', $s['morning_start']);
+    $ms = (int)$h * 60 + (int)$m;
+    list($h, $m) = explode(':', $s['morning_end']);
+    $me = (int)$h * 60 + (int)$m;
+    list($h, $m) = explode(':', $s['evening_start']);
+    $es = (int)$h * 60 + (int)$m;
+    list($h, $m) = explode(':', $s['evening_end']);
+    $ee = (int)$h * 60 + (int)$m;
+    return ($current_minutes >= $ms && $current_minutes <= $me) ||
+           ($current_minutes >= $es && $current_minutes <= $ee);
 }
 
 // 获取当前记录类型 (早读/晚读)
