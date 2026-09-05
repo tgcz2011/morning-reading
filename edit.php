@@ -69,13 +69,12 @@ if (isset($_POST['action'])) {
     } elseif ($action === 'clear_data' && isset($_POST['class_id'])) {
         $r = clearClassData((int)$_POST['class_id']);
     } elseif ($action === 'preview_import') {
-        // 第一步：上传 CSV → 解析 → 存入会话待确认
-        if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
-            $r = ['success' => false, 'message' => '文件上传失败，请重试'];
-        } elseif ($_FILES['csv_file']['size'] > 512 * 1024) {
-            $r = ['success' => false, 'message' => '文件过大（最大 512KB）'];
+        // 第一步：上传 Excel → 解析 → 存入会话待确认
+        $parsed = parseStudentFile(isset($_FILES['csv_file']) ? $_FILES['csv_file'] : null);
+        if (isset($parsed['error'])) {
+            $r = ['success' => false, 'message' => $parsed['error']];
         } else {
-            $raw = parseCsvText(file_get_contents($_FILES['csv_file']['tmp_name']));
+            $raw = $parsed['rows'];
             list($rows) = normalizeImportRows($raw);
             if (empty($rows)) {
                 $r = ['success' => false, 'message' => '未解析到有效行（格式：第一列学号，第二列姓名）'];
@@ -110,12 +109,9 @@ if (isset($_POST['action'])) {
     exit;
 }
 
-// 下载导入模板（CSV：第一列学号，第二列姓名）
+// 下载导入模板（Excel .xlsx）
 if (isset($_GET['action']) && $_GET['action'] === 'download_template') {
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="学生名单模板.csv"');
-    echo "\xEF\xBB\xBF学号,姓名\n1,示例学生\n2,示例学生\n";
-    exit;
+    outputStudentTemplate();
 }
 
 $message = '';
@@ -231,15 +227,15 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                     <strong>共 <?php echo count($sel_students); ?> 名学生（姓名自动转码存储）</strong>
                 </div>
 
-                <!-- 批量导入（CSV） -->
+                <!-- 批量导入（Excel） -->
                 <div class="import-box">
-                    <div class="import-title">批量导入（CSV）</div>
-                    <div class="import-sub">格式：<strong>第一列学号，第二列姓名</strong>，每行一名学生，可含表头行；支持 Excel 导出的 .csv 文件（自动兼容 GBK/UTF-8 编码）</div>
+                    <div class="import-title">批量导入（Excel）</div>
+                    <div class="import-sub">下载模板或用自己班的全班 Excel 名单：<strong>第一列学号，第二列姓名</strong>，每行一名学生，可含表头行；填好后直接上传 <strong>.xlsx</strong> 文件即可</div>
                     <form method="POST" enctype="multipart/form-data" class="admin-inline-form" style="flex-wrap:wrap;">
                         <input type="hidden" name="action" value="preview_import">
-                        <input type="file" name="csv_file" accept=".csv,text/csv" class="admin-input" required>
+                        <input type="file" name="csv_file" accept=".xlsx,.csv" class="admin-input" required>
                         <button type="submit" class="admin-btn solid">解析并预览</button>
-                        <a href="edit.php?action=download_template" class="admin-btn">下载模板</a>
+                        <a href="edit.php?action=download_template" class="admin-btn">下载 Excel 模板</a>
                     </form>
 
                     <?php if ($import_preview): ?>

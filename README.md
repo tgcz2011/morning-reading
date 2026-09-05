@@ -36,3 +36,9 @@
 
 - `config.php` 含真实数据库凭据，已被 `.gitignore` 排除，**禁止提交到公开仓库**；公开仓库只保留 `config.example.php` 模板。
 - 学生姓名以 base64 存储于 `name_encoded` 列，读取时自动解码显示，数据库字符集无中文也不影响。
+
+## 批量导入学生名单（Excel）
+
+- 教师管理 / 总管理的「学生名单」页：下载 Excel 模板 → 填写（第一列学号，第二列姓名，可含表头行）→ 上传 .xlsx → 解析预览 → 确认导入。
+- 学号已存在的自动跳过；坏行（空姓名、非数字学号等）自动跳过并提示；兼容 .csv 文件。
+- xlsx 解析使用 [SimpleXLSX](https://github.com/shuchkin/simplexlsx)（MIT License，单文件无依赖）。

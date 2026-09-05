@@ -728,4 +728,83 @@ function importStudents($class_id, $raw_rows) {
     if (!empty($errors)) $msg .= "；格式问题 " . count($errors) . " 处（已跳过）";
     return ['success' => true, 'message' => $msg, 'imported' => $imported, 'skipped' => $skipped, 'errors' => $errors];
 }
+
+// 解析上传的名单文件（.xlsx 用 SimpleXLSX，其余按文本/CSV 处理），返回 ['rows' => [...]] 或 ['error' => '...']
+function parseStudentFile($upload) {
+    if (!isset($upload['error']) || $upload['error'] !== UPLOAD_ERR_OK) {
+        return ['error' => '文件上传失败，请重试'];
+    }
+    if ($upload['size'] > 512 * 1024) {
+        return ['error' => '文件过大（最大 512KB）'];
+    }
+    $ext = strtolower(pathinfo($upload['name'], PATHINFO_EXTENSION));
+    if ($ext === 'xlsx') {
+        if (!class_exists('ZipArchive')) {
+            return ['error' => '服务器缺少 zip 扩展，无法解析 .xlsx，请把名单另存为 .csv 后上传'];
+        }
+        require_once __DIR__ . '/simplexlsx.php';
+        $xlsx = Shuchkin\SimpleXLSX::parse($upload['tmp_name']);
+        if (!$xlsx) {
+            return ['error' => '无法解析该 Excel 文件（' . Shuchkin\SimpleXLSX::parseError() . '），请确认是用 Excel 保存的 .xlsx'];
+        }
+        $rows = [];
+        foreach ($xlsx->rows() as $row) {
+            $cells = array_values((array)$row);
+            if (!empty($cells)) $rows[] = $cells;
+        }
+        return ['rows' => $rows];
+    }
+    // 其他（.csv 等）按文本解析
+    return ['rows' => parseCsvText(file_get_contents($upload['tmp_name']))];
+}
+
+// 输出学生名单模板（优先 .xlsx，服务器无 zip 扩展时退回 .csv）
+function outputStudentTemplate() {
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        $tmp = tempnam(sys_get_temp_dir(), 'mrtpl');
+        if ($zip->open($tmp, ZipArchive::OVERWRITE) === true) {
+            $zip->addFromString('[Content_Types].xml',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                . '<Default Extension="xml" ContentType="application/xml"/>'
+                . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                . '</Types>');
+            $zip->addFromString('_rels/.rels',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+                . '</Relationships>');
+            $zip->addFromString('xl/workbook.xml',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                . '<sheets><sheet name="学生名单" sheetId="1" r:id="rId1"/></sheets></workbook>');
+            $zip->addFromString('xl/_rels/workbook.xml.rels',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                . '</Relationships>');
+            $zip->addFromString('xl/worksheets/sheet1.xml',
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                . '<row r="1"><c r="A1" t="inlineStr"><is><t>学号</t></is></c><c r="B1" t="inlineStr"><is><t>姓名</t></is></c></row>'
+                . '<row r="2"><c r="A2" t="n"><v>1</v></c><c r="B2" t="inlineStr"><is><t>示例学生</t></is></c></row>'
+                . '<row r="3"><c r="A3" t="n"><v>2</v></c><c r="B3" t="inlineStr"><is><t>示例学生</t></is></c></row>'
+                . '</sheetData></worksheet>');
+            $zip->close();
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="学生名单模板.xlsx"');
+            readfile($tmp);
+            unlink($tmp);
+            exit;
+        }
+    }
+    // 兜底：CSV 模板
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="学生名单模板.csv"');
+    echo "\xEF\xBB\xBF学号,姓名\n1,示例学生\n2,示例学生\n";
+    exit;
+}
 ?>
