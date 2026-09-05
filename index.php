@@ -172,33 +172,104 @@ if (isset($_SESSION['message'])) {
         <div class="instructions">
             <p class="strong">操作说明</p>
             <p>点击 + 加分 · 点击 − 扣分</p>
-            <p>绿色「已录」印章 = 今日该时段已记录 · 红色「待补」印章 = 有扣分待补齐</p>
-            <p>红色卡片需先 + 补齐扣分，才能继续加分</p>
+            <p>绿色「优秀」= 今日该时段已记录 · 红色「差」= 有扣分待补齐</p>
+            <p>一次朗读时间最多加一分，扣分不限</p>
             <?php if (!canRecord()): ?>
             <p class="strong">当前不在记录时间段内，无法进行操作</p>
             <?php endif; ?>
         </div>
     </div>
 
+    <!-- 自绘弹窗（不用浏览器原生弹窗，方便老师从远处看到） -->
+    <div class="modal-overlay" id="modalOverlay" hidden>
+        <div class="modal-card">
+            <div class="modal-stamp" id="modalStamp">!</div>
+            <div class="modal-title" id="modalTitle"></div>
+            <div class="modal-desc" id="modalDesc"></div>
+            <div class="modal-actions">
+                <button class="modal-btn ghost" id="modalCancel" hidden>取消</button>
+                <button class="modal-btn solid" id="modalOk">知道了</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // 显示消息
-        function showMessage(message, type) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}`;
-            messageDiv.textContent = message;
-            
-            const container = document.querySelector('.container');
-            const navBar = document.querySelector('.nav-bar');
-            container.insertBefore(messageDiv, navBar.nextSibling);
-            
-            // 3秒后自动消失
-            setTimeout(() => {
-                messageDiv.remove();
-            }, 3000);
+        // ================= Toast 底部轻提示 =================
+        let toastTimer = null;
+        function showToast(message, type) {
+            let toast = document.getElementById('toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toast';
+                document.body.appendChild(toast);
+            }
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
         }
         
-        // 处理加分
+        // ================= 自绘弹窗（不用浏览器原生 alert/confirm） =================
+        let modalOkCallback = null;
+        let modalCancelCallback = null;
+        
+        function showModal({ stamp = '!', title = '', desc = '', okText = '知道了', cancelText = null }) {
+            return new Promise(resolve => {
+                document.getElementById('modalStamp').textContent = stamp;
+                document.getElementById('modalTitle').textContent = title;
+                document.getElementById('modalDesc').textContent = desc;
+                const okBtn = document.getElementById('modalOk');
+                const cancelBtn = document.getElementById('modalCancel');
+                okBtn.textContent = okText;
+                cancelBtn.hidden = !cancelText;
+                cancelBtn.textContent = cancelText || '';
+                modalOkCallback = () => { closeModal(); resolve(true); };
+                modalCancelCallback = cancelText ? () => { closeModal(); resolve(false); } : null;
+                document.getElementById('modalOverlay').hidden = false;
+            });
+        }
+        
+        function closeModal() {
+            document.getElementById('modalOverlay').hidden = true;
+            modalOkCallback = null;
+            modalCancelCallback = null;
+        }
+        
+        document.getElementById('modalOk').addEventListener('click', () => modalOkCallback && modalOkCallback());
+        document.getElementById('modalCancel').addEventListener('click', () => modalCancelCallback && modalCancelCallback());
+        document.getElementById('modalOverlay').addEventListener('click', e => {
+            // 只有带取消按钮的确认弹窗才允许点空白关闭，提示弹窗必须点"知道了"
+            if (e.target === e.currentTarget && modalCancelCallback) modalCancelCallback();
+        });
+        
+        // ================= 点击即时反馈（不等服务器回传） =================
+        const pendingCards = new Set();
+        
+        function beginAction(studentId, kind) {
+            const card = document.querySelector(`.student-card[data-student-id="${studentId}"]`);
+            if (!card) return;
+            card.classList.remove('tapped-add', 'tapped-sub');
+            void card.offsetWidth; // 强制重排以重启动画
+            card.classList.add(kind === 'add' ? 'tapped-add' : 'tapped-sub');
+            card.classList.add('pending');
+        }
+        
+        function endAction(studentId) {
+            const card = document.querySelector(`.student-card[data-student-id="${studentId}"]`);
+            if (!card) return;
+            card.classList.remove('tapped-add', 'tapped-sub', 'pending');
+        }
+        
+        // ================= 处理加分 =================
         function handleAdd(studentId) {
+            if (pendingCards.has(studentId)) return;
+            pendingCards.add(studentId);
+            
+            // 点击立即有反应：卡片波纹 + 底部提示
+            beginAction(studentId, 'add');
+            showToast('正在加分…', 'info');
+            
             fetch('index.php', {
                 method: 'POST',
                 headers: {
@@ -208,24 +279,48 @@ if (isset($_SESSION['message'])) {
             })
             .then(response => response.json())
             .then(data => {
+                endAction(studentId);
+                if (data.status) updateStudentCard(studentId, data.status);
+                
                 if (data.success) {
-                    showMessage(data.message, 'success');
-                    updateStudentCard(studentId, data.status);
+                    showToast(data.message, 'success');
+                } else if (data.already_added) {
+                    // 已经记录过 / 本次已加过分：弹大窗提示
+                    showModal({
+                        stamp: '!',
+                        title: data.message,
+                        desc: '每名同学一次朗读时间最多加一分',
+                        okText: '知道了'
+                    });
                 } else {
-                    showMessage(data.message, 'error');
+                    showToast(data.message, 'error');
                 }
             })
             .catch(error => {
+                endAction(studentId);
                 console.error('Error:', error);
-                showMessage('操作失败，请重试', 'error');
-            });
+                showToast('网络异常，操作未生效，请重试', 'error');
+            })
+            .finally(() => pendingCards.delete(studentId));
         }
         
-        // 处理扣分
-        function handleSubtract(studentId) {
-            if (!confirm('确定要扣分吗？')) {
-                return;
-            }
+        // ================= 处理扣分 =================
+        async function handleSubtract(studentId) {
+            if (pendingCards.has(studentId)) return;
+            
+            // 自绘确认弹窗（不用浏览器 confirm）
+            const confirmed = await showModal({
+                stamp: '−',
+                title: '确定要扣分吗？',
+                desc: '扣分没有上限，本次扣 1 分',
+                okText: '确定扣分',
+                cancelText: '取消'
+            });
+            if (!confirmed) return;
+            
+            pendingCards.add(studentId);
+            beginAction(studentId, 'sub');
+            showToast('正在扣分…', 'info');
             
             fetch('index.php', {
                 method: 'POST',
@@ -236,20 +331,24 @@ if (isset($_SESSION['message'])) {
             })
             .then(response => response.json())
             .then(data => {
+                endAction(studentId);
+                if (data.status) updateStudentCard(studentId, data.status);
+                
                 if (data.success) {
-                    showMessage('扣分成功', 'success');
-                    updateStudentCard(studentId, data.status);
+                    showToast('扣分成功', 'success');
                 } else {
-                    showMessage(data.message, 'error');
+                    showToast(data.message, 'error');
                 }
             })
             .catch(error => {
+                endAction(studentId);
                 console.error('Error:', error);
-                showMessage('操作失败，请重试', 'error');
-            });
+                showToast('网络异常，操作未生效，请重试', 'error');
+            })
+            .finally(() => pendingCards.delete(studentId));
         }
         
-        // 更新学生卡片
+        // ================= 更新学生卡片 =================
         function updateStudentCard(studentId, status) {
             const card = document.querySelector(`.student-card[data-student-id="${studentId}"]`);
             if (!card) return;
@@ -257,7 +356,7 @@ if (isset($_SESSION['message'])) {
             // 更新卡片状态
             card.classList.remove('recorded', 'penalized');
             
-            // 只要有负分或者当前时间段有扣分，卡片呈"待补"红色印章状态
+            // 只要有负分或者当前时间段有扣分，卡片呈"差"红色印章状态
             if (status.weekly_score < 0 || status.has_penalty_in_session) {
                 card.classList.add('penalized');
             } else {
@@ -269,7 +368,7 @@ if (isset($_SESSION['message'])) {
                 }
             }
             
-            // 更新负分显示 - 修复问题2：显示在按钮下方
+            // 更新负分显示（按钮下方）
             let penaltyDisplay = card.querySelector('.penalty-display');
             if (status.weekly_score < 0) {
                 if (!penaltyDisplay) {

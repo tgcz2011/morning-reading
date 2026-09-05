@@ -248,7 +248,7 @@ body {
 }
 
 .student-card.recorded::after {
-    content: '已录';
+    content: '优秀';
     color: var(--pine);
     opacity: 1;
     animation: stamp-in .3s ease;
@@ -260,7 +260,7 @@ body {
 }
 
 .student-card.penalized::after {
-    content: '待补';
+    content: '差';
     color: var(--vermilion);
     opacity: 1;
     animation: stamp-in .3s ease;
@@ -355,6 +355,172 @@ body {
     font-weight: 700;
     color: var(--vermilion);
     letter-spacing: .08em;
+}
+
+/* ---------- 点击即时反馈（不等服务器回传） ---------- */
+
+.student-card.tapped-add::before,
+.student-card.tapped-sub::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    animation: card-ripple .55s ease-out forwards;
+}
+
+.student-card.tapped-add::before { border: 2px solid var(--pine); }
+.student-card.tapped-sub::before { border: 2px solid var(--vermilion); }
+
+@keyframes card-ripple {
+    0%   { transform: scale(.94); opacity: .95; }
+    100% { transform: scale(1.05); opacity: 0; }
+}
+
+.student-card.pending {
+    pointer-events: none;
+}
+
+.student-card.pending .action-btn {
+    opacity: .55;
+}
+
+/* ---------- Toast 底部轻提示 ---------- */
+
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: 30px;
+    transform: translate(-50%, 16px);
+    z-index: 200;
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-size: .95rem;
+    font-weight: 600;
+    background: var(--ink);
+    color: #F4EEDF;
+    box-shadow: 0 8px 24px rgba(38,36,31,.28);
+    opacity: 0;
+    transition: opacity .25s, transform .25s;
+    pointer-events: none;
+    max-width: 88vw;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.toast.success { background: var(--pine); }
+.toast.error   { background: var(--vermilion); }
+
+/* ---------- 自绘弹窗（大字号，老师远处可见） ---------- */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(38,36,31,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+    padding: 20px;
+}
+
+.modal-overlay[hidden] {
+    display: none;
+}
+
+.modal-card {
+    width: min(430px, 92vw);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(38,36,31,.35);
+    padding: 34px 26px 26px;
+    text-align: center;
+    animation: modal-pop .3s ease;
+}
+
+@keyframes modal-pop {
+    0%   { transform: scale(.85) translateY(12px); opacity: 0; }
+    100% { transform: scale(1) translateY(0);     opacity: 1; }
+}
+
+.modal-stamp {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 700;
+    color: #F4EEDF;
+    background: var(--vermilion);
+    border-radius: 14px;
+    transform: rotate(-4deg);
+    box-shadow: 0 4px 10px rgba(196,58,44,.35);
+}
+
+.modal-title {
+    font-family: var(--serif);
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    margin-bottom: 10px;
+}
+
+.modal-desc {
+    font-size: .95rem;
+    color: var(--ink-soft);
+    margin-bottom: 22px;
+    line-height: 1.5;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.modal-btn {
+    padding: 11px 26px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .1s, background .2s, border-color .2s;
+}
+
+.modal-btn:active {
+    transform: scale(.96);
+}
+
+.modal-btn.solid {
+    background: var(--vermilion);
+    color: #F4EEDF;
+}
+
+.modal-btn.solid:hover {
+    background: var(--vermilion-deep);
+}
+
+.modal-btn.ghost {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+}
+
+.modal-btn.ghost:hover {
+    border-color: var(--ink-soft);
+    color: var(--ink);
 }
 
 /* ---------- 操作说明 ---------- */

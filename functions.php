@@ -92,6 +92,13 @@ function addRecord($student_id, $type = null) {
     $pdo = getDB();
     $type = $type ?: getCurrentRecordType();
     $today = date('Y-m-d');
+    $session_key = $type . '-' . $today;
+    
+    // 修复：一次朗读时间最多加一分（加分后锁定，扣分不受限）
+    if (isset($_SESSION['session_added']) && isset($_SESSION['session_added'][$student_id]) 
+        && $_SESSION['session_added'][$student_id] === $session_key) {
+        return ['success' => false, 'message' => '本次朗读已加过分，最多加一分', 'already_added' => true];
+    }
     
     // 检查当前时间段是否有扣分
     $has_penalty = hasPenaltyInCurrentSession($student_id);
@@ -116,7 +123,10 @@ function addRecord($student_id, $type = null) {
             $stmt->execute([$student_id, $current_week]);
         }
         
-        return ['success' => true, 'message' => '已清除一次扣分记录'];
+        // 锁定本次朗读时段的加分
+        $_SESSION['session_added'][$student_id] = $session_key;
+        
+        return ['success' => true, 'message' => '已补回一分'];
     }
     
     // 检查今天是否已经记录过
@@ -125,7 +135,7 @@ function addRecord($student_id, $type = null) {
     $stmt->execute([$student_id, $today, $type]);
     
     if ($stmt->fetch()) {
-        return ['success' => false, 'message' => '今天已经记录过' . ($type === 'morning' ? '早读' : '晚读')];
+        return ['success' => false, 'message' => '今天已经记录过' . ($type === 'morning' ? '早读' : '晚读'), 'already_added' => true];
     }
     
     // 插入新记录
@@ -143,6 +153,9 @@ function addRecord($student_id, $type = null) {
     
     // 更新周统计
     updateWeeklyStats($student_id, getWeekNumber(), $type, 1);
+    
+    // 锁定本次朗读时段的加分
+    $_SESSION['session_added'][$student_id] = $session_key;
     
     return ['success' => true, 'message' => '记录成功'];
 }
