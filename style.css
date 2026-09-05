@@ -156,6 +156,88 @@ body {
     color: #F4EEDF;
 }
 
+.nav-admin {
+    border: 1px solid var(--line);
+    font-size: .84rem;
+}
+
+.nav-logout {
+    color: var(--ink-faint);
+    font-size: .84rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.nav-logout:hover {
+    color: var(--vermilion);
+    background: none;
+}
+
+/* ---------- 登录页 ---------- */
+
+.login-select {
+    width: 100%;
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    font-size: 1rem;
+    text-align: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #FFFFFF;
+    color: var(--ink);
+    outline: none;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.login-select:focus {
+    border-color: var(--vermilion);
+    box-shadow: 0 0 0 3px rgba(196,58,44,.12);
+}
+
+.login-hint {
+    margin-top: 16px;
+    font-size: .8rem;
+    color: var(--ink-faint);
+    line-height: 1.7;
+}
+
+/* ---------- 空名单 ---------- */
+
+.empty-roster {
+    padding: 44px 20px;
+    text-align: center;
+    color: var(--ink-faint);
+    line-height: 2;
+    border-top: 1px dashed var(--line);
+}
+
+.empty-roster p:first-child {
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+}
+
+/* ---------- 已加分标识 ---------- */
+
+.added-chip {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 0 6px 1px;
+    font-size: .64rem;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--amber);
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    vertical-align: 1px;
+    letter-spacing: .1em;
+    background: rgba(154,111,18,.08);
+}
+
 /* ---------- 提示条 ---------- */
 
 .time-restriction {
@@ -786,6 +868,103 @@ body {
 .chart-wrap {
     max-width: 620px;
     margin: 0 auto;
+}
+
+/* ---------- 教师管理页 ---------- */
+
+.admin-body {
+    padding: 18px 20px 32px;
+}
+
+.admin-inline-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+}
+
+.admin-add-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.admin-input {
+    padding: 8px 10px;
+    font-size: .9rem;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #FFFFFF;
+    color: var(--ink);
+    outline: none;
+    min-width: 90px;
+    transition: border-color .2s;
+}
+
+.admin-input:focus {
+    border-color: var(--vermilion);
+}
+
+.admin-input.tiny {
+    width: 64px;
+    min-width: 64px;
+    text-align: center;
+}
+
+.admin-btn {
+    padding: 8px 16px;
+    font-size: .88rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    color: #F4EEDF;
+    background: var(--pine);
+    transition: background .2s, transform .1s;
+}
+
+.admin-btn:hover {
+    background: #2A5F45;
+}
+
+.admin-btn:active {
+    transform: scale(.96);
+}
+
+.admin-btn.small {
+    padding: 6px 12px;
+    font-size: .82rem;
+}
+
+.admin-btn.danger {
+    background: var(--vermilion);
+}
+
+.admin-btn.danger:hover {
+    background: var(--vermilion-deep);
+}
+
+.admin-btn.solid {
+    background: var(--vermilion);
+}
+
+.admin-btn.solid:hover {
+    background: var(--vermilion-deep);
+}
+
+.admin-student-table td {
+    padding: 6px 8px;
+}
+
+.pwd-show {
+    font-family: var(--mono);
+    font-size: .86rem;
+    background: rgba(242,237,224,.8);
+    padding: 2px 8px;
+    border-radius: 5px;
+    color: var(--ink-soft);
 }
 
 /* ---------- 移动端 ---------- */
