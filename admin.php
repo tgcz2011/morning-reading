@@ -2,6 +2,11 @@
 require_once 'functions.php';
 initDatabase();
 
+// ================= 下载导入模板（Excel .xlsx，无需登录，模板无敏感数据） =================
+if (isset($_GET['action']) && $_GET['action'] === 'download_template') {
+    outputStudentTemplate();
+}
+
 // ================= 教师登录（班级号 + 教师管理密码） =================
 if (isset($_POST['teacher_login'])) {
     $class_number = isset($_POST['class_number']) ? (int)$_POST['class_number'] : 0;
@@ -58,11 +63,6 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
 $teacher_class_id = getTeacherClassId();
 $teacher_class_number = getTeacherClassNumber();
 $tab = isset($_GET['tab']) ? $_GET['tab'] : 'students';
-
-// 下载导入模板（Excel .xlsx）
-if (isset($_GET['action']) && $_GET['action'] === 'download_template') {
-    outputStudentTemplate();
-}
 
 if (isset($_POST['action'])) {
     $action = $_POST['action'];

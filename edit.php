@@ -2,6 +2,11 @@
 require_once 'functions.php';
 initDatabase();
 
+// ================= 下载导入模板（Excel .xlsx，无需登录，模板无敏感数据） =================
+if (isset($_GET['action']) && $_GET['action'] === 'download_template') {
+    outputStudentTemplate();
+}
+
 // ================= 总管理登录（仅密码，无入口链接，纯背网址访问） =================
 if (isset($_POST['super_login'])) {
     if (superLogin($_POST['password'])) {
@@ -107,11 +112,6 @@ if (isset($_POST['action'])) {
     $_SESSION['edit_msg_type'] = $r['success'] ? 'success' : 'error';
     header('Location: ' . $redirect);
     exit;
-}
-
-// 下载导入模板（Excel .xlsx）
-if (isset($_GET['action']) && $_GET['action'] === 'download_template') {
-    outputStudentTemplate();
 }
 
 $message = '';
