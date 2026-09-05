@@ -688,7 +688,7 @@ function normalizeImportRows($raw_rows) {
     return [$rows, $errors];
 }
 
-// 执行导入（跳过本班已存在的学号，返回统计）
+// 执行导入（学号已存在时直接覆盖姓名，返回统计）
 function importStudents($class_id, $raw_rows) {
     list($rows, $errors) = normalizeImportRows($raw_rows);
     if (empty($rows)) {
@@ -696,13 +696,13 @@ function importStudents($class_id, $raw_rows) {
             'success' => false,
             'message' => '没有可导入的学生（格式：第一列学号，第二列姓名）',
             'imported' => 0,
-            'skipped' => 0,
+            'updated' => 0,
             'errors' => $errors
         ];
     }
 
     $pdo = getDB();
-    // 现有学号集合（防重复导入）
+    // 现有学号集合（用于判断覆盖或新增；文件内重复学号也按后者覆盖前者处理）
     $stmt = $pdo->prepare("SELECT student_no FROM students WHERE class_id = ?");
     $stmt->execute([(int)$class_id]);
     $existing = [];
@@ -711,22 +711,25 @@ function importStudents($class_id, $raw_rows) {
     }
 
     $imported = 0;
-    $skipped = 0;
+    $updated = 0;
+    $upd = $pdo->prepare("UPDATE students SET name_encoded = ? WHERE class_id = ? AND student_no = ?");
+    $ins = $pdo->prepare("INSERT INTO students (class_id, student_no, name_encoded) VALUES (?, ?, ?)");
     foreach ($rows as $r) {
+        $encoded = encodeName($r['name']);
         if (isset($existing[$r['student_no']])) {
-            $skipped++;
-            continue;
+            $upd->execute([$encoded, (int)$class_id, $r['student_no']]);
+            $updated++;
+        } else {
+            $ins->execute([(int)$class_id, $r['student_no'], $encoded]);
+            $existing[$r['student_no']] = true;
+            $imported++;
         }
-        $stmt = $pdo->prepare("INSERT INTO students (class_id, student_no, name_encoded) VALUES (?, ?, ?)");
-        $stmt->execute([(int)$class_id, $r['student_no'], encodeName($r['name'])]);
-        $existing[$r['student_no']] = true;
-        $imported++;
     }
 
     $msg = "成功导入 {$imported} 名学生";
-    if ($skipped > 0) $msg .= "，跳过 {$skipped} 名（学号已存在）";
+    if ($updated > 0) $msg .= "，覆盖 {$updated} 名（学号已存在，姓名已更新）";
     if (!empty($errors)) $msg .= "；格式问题 " . count($errors) . " 处（已跳过）";
-    return ['success' => true, 'message' => $msg, 'imported' => $imported, 'skipped' => $skipped, 'errors' => $errors];
+    return ['success' => true, 'message' => $msg, 'imported' => $imported, 'updated' => $updated, 'errors' => $errors];
 }
 
 // 解析上传的名单文件（.xlsx 用 SimpleXLSX，其余按文本/CSV 处理），返回 ['rows' => [...]] 或 ['error' => '...']

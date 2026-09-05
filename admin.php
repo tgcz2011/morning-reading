@@ -197,7 +197,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                     <?php $preview_rows = normalizeImportRows($import_preview['rows'])[0]; ?>
                     <div class="import-preview">
                         <div class="stats-note" style="margin-top:12px;">
-                            <strong>预览：</strong>共解析 <?php echo count($preview_rows); ?> 名学生（学号已存在的会被跳过），确认后写入：
+                            <strong>预览：</strong>共解析 <?php echo count($preview_rows); ?> 名学生（学号已存在的会直接覆盖姓名），确认后写入：
                         </div>
                         <table class="ranking-table admin-student-table">
                             <thead><tr><th width="25%">学号</th><th width="75%">姓名</th></tr></thead>
