@@ -68,6 +68,34 @@ if (isset($_POST['action'])) {
         $r = deleteStudent((int)$_POST['student_id']);
     } elseif ($action === 'clear_data' && isset($_POST['class_id'])) {
         $r = clearClassData((int)$_POST['class_id']);
+    } elseif ($action === 'preview_import') {
+        // 第一步：上传 CSV → 解析 → 存入会话待确认
+        if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+            $r = ['success' => false, 'message' => '文件上传失败，请重试'];
+        } elseif ($_FILES['csv_file']['size'] > 512 * 1024) {
+            $r = ['success' => false, 'message' => '文件过大（最大 512KB）'];
+        } else {
+            $raw = parseCsvText(file_get_contents($_FILES['csv_file']['tmp_name']));
+            list($rows) = normalizeImportRows($raw);
+            if (empty($rows)) {
+                $r = ['success' => false, 'message' => '未解析到有效行（格式：第一列学号，第二列姓名）'];
+            } else {
+                $_SESSION['import_preview'][$sel_class] = ['rows' => $raw, 'raw_count' => count($raw)];
+                $r = ['success' => true, 'message' => '已解析 ' . count($rows) . ' 名学生，请在下方确认'];
+                $redirect = 'edit.php?tab=students&class=' . $sel_class . '&preview=1';
+            }
+        }
+    } elseif ($action === 'confirm_import') {
+        // 第二步：确认导入
+        if (!empty($_SESSION['import_preview'][$sel_class])) {
+            $r = importStudents($sel_class, $_SESSION['import_preview'][$sel_class]['rows']);
+            unset($_SESSION['import_preview'][$sel_class]);
+        } else {
+            $r = ['success' => false, 'message' => '没有待确认的导入数据'];
+        }
+    } elseif ($action === 'cancel_import') {
+        unset($_SESSION['import_preview'][$sel_class]);
+        $r = ['success' => true, 'message' => '已取消导入'];
     } elseif ($action === 'super_logout') {
         unset($_SESSION['super_logged_in']);
         header('Location: edit.php');
@@ -82,6 +110,14 @@ if (isset($_POST['action'])) {
     exit;
 }
 
+// 下载导入模板（CSV：第一列学号，第二列姓名）
+if (isset($_GET['action']) && $_GET['action'] === 'download_template') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="学生名单模板.csv"');
+    echo "\xEF\xBB\xBF学号,姓名\n1,示例学生\n2,示例学生\n";
+    exit;
+}
+
 $message = '';
 $message_type = '';
 if (isset($_SESSION['edit_msg'])) {
@@ -92,6 +128,8 @@ if (isset($_SESSION['edit_msg'])) {
 }
 
 $classes = getAllClasses();
+// 待确认的导入预览（会话中）
+$import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['import_preview'][$sel_class] : null;
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -191,6 +229,50 @@ $classes = getAllClasses();
                 ?>
                 <div class="stats-note">
                     <strong>共 <?php echo count($sel_students); ?> 名学生（姓名自动转码存储）</strong>
+                </div>
+
+                <!-- 批量导入（CSV） -->
+                <div class="import-box">
+                    <div class="import-title">批量导入（CSV）</div>
+                    <div class="import-sub">格式：<strong>第一列学号，第二列姓名</strong>，每行一名学生，可含表头行；支持 Excel 导出的 .csv 文件（自动兼容 GBK/UTF-8 编码）</div>
+                    <form method="POST" enctype="multipart/form-data" class="admin-inline-form" style="flex-wrap:wrap;">
+                        <input type="hidden" name="action" value="preview_import">
+                        <input type="file" name="csv_file" accept=".csv,text/csv" class="admin-input" required>
+                        <button type="submit" class="admin-btn solid">解析并预览</button>
+                        <a href="edit.php?action=download_template" class="admin-btn">下载模板</a>
+                    </form>
+
+                    <?php if ($import_preview): ?>
+                    <?php $preview_rows = normalizeImportRows($import_preview['rows'])[0]; ?>
+                    <div class="import-preview">
+                        <div class="stats-note" style="margin-top:12px;">
+                            <strong>预览：</strong>共解析 <?php echo count($preview_rows); ?> 名学生（学号已存在的会被跳过），确认后写入：
+                        </div>
+                        <table class="ranking-table admin-student-table">
+                            <thead><tr><th width="25%">学号</th><th width="75%">姓名</th></tr></thead>
+                            <tbody>
+                                <?php
+                                $shown = 0;
+                                foreach ($preview_rows as $r) {
+                                    if ($shown++ >= 50) break;
+                                    echo "<tr><td>{$r['student_no']}</td><td>" . htmlspecialchars($r['name']) . "</td></tr>";
+                                }
+                                if (count($preview_rows) > 50) {
+                                    echo '<tr><td colspan="2" style="color:var(--ink-faint);">… 其余 ' . (count($preview_rows) - 50) . ' 行略，共 ' . count($preview_rows) . ' 行</td></tr>';
+                                }
+                                ?>
+                            </tbody>
+                        </table>
+                        <form method="POST" class="admin-inline-form" style="margin-top:10px;gap:10px;">
+                            <input type="hidden" name="action" value="confirm_import">
+                            <button type="submit" class="admin-btn solid">确认导入</button>
+                        </form>
+                        <form method="POST" class="admin-inline-form">
+                            <input type="hidden" name="action" value="cancel_import">
+                            <button type="submit" class="admin-btn small danger">取消</button>
+                        </form>
+                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <form method="POST" class="admin-add-form">

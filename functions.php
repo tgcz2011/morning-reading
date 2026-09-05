@@ -632,4 +632,100 @@ function clearClassData($class_id) {
     $pdo->prepare("DELETE FROM penalty_records WHERE class_id = ?")->execute([(int)$class_id]);
     return ['success' => true, 'message' => '该班记录数据已清空'];
 }
+
+// ============================================================
+// 批量导入（CSV：第一列学号，第二列姓名）
+// ============================================================
+
+// 解析 CSV 文本为行数组（兼容 UTF-8 BOM / GBK 编码 / 多种换行）
+function parseCsvText($content) {
+    // 去除 UTF-8 BOM
+    $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
+    // 非 UTF-8 时尝试按 GBK 系列转换（Windows 版 Excel 导出的 CSV 常为 GBK）
+    if (function_exists('mb_check_encoding') && !mb_check_encoding($content, 'UTF-8')) {
+        $converted = @mb_convert_encoding($content, 'UTF-8', 'GB18030,GBK,GB2312');
+        if ($converted) $content = $converted;
+    }
+    // 统一换行符
+    $content = str_replace(["\r\n", "\r"], "\n", $content);
+    $lines = explode("\n", $content);
+    $rows = [];
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
+        $cells = str_getcsv($line);
+        $rows[] = $cells;
+    }
+    return $rows;
+}
+
+// 规范化导入行：过滤表头/空行/非法行，返回 [有效行, 错误说明]
+function normalizeImportRows($raw_rows) {
+    $rows = [];
+    $errors = [];
+    foreach ($raw_rows as $idx => $cells) {
+        $line_no = $idx + 1;
+        $no = isset($cells[0]) ? trim((string)$cells[0]) : '';
+        $name = isset($cells[1]) ? trim((string)$cells[1]) : '';
+        // 学号非数字：表头（如"学号,姓名"）或无效行，跳过
+        if ($no === '' || !ctype_digit($no)) {
+            if ($no !== '' || $name !== '') {
+                $errors[] = "第 {$line_no} 行跳过：学号必须是数字（表头行会自动跳过）";
+            }
+            continue;
+        }
+        if ($name === '') {
+            $errors[] = "第 {$line_no} 行跳过：姓名为空";
+            continue;
+        }
+        $name_len = function_exists('mb_strlen') ? mb_strlen($name) : strlen($name);
+        if ($name_len > 20) {
+            $errors[] = "第 {$line_no} 行跳过：姓名过长";
+            continue;
+        }
+        $rows[] = ['student_no' => (int)$no, 'name' => $name];
+    }
+    return [$rows, $errors];
+}
+
+// 执行导入（跳过本班已存在的学号，返回统计）
+function importStudents($class_id, $raw_rows) {
+    list($rows, $errors) = normalizeImportRows($raw_rows);
+    if (empty($rows)) {
+        return [
+            'success' => false,
+            'message' => '没有可导入的学生（格式：第一列学号，第二列姓名）',
+            'imported' => 0,
+            'skipped' => 0,
+            'errors' => $errors
+        ];
+    }
+
+    $pdo = getDB();
+    // 现有学号集合（防重复导入）
+    $stmt = $pdo->prepare("SELECT student_no FROM students WHERE class_id = ?");
+    $stmt->execute([(int)$class_id]);
+    $existing = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $n) {
+        $existing[(int)$n] = true;
+    }
+
+    $imported = 0;
+    $skipped = 0;
+    foreach ($rows as $r) {
+        if (isset($existing[$r['student_no']])) {
+            $skipped++;
+            continue;
+        }
+        $stmt = $pdo->prepare("INSERT INTO students (class_id, student_no, name_encoded) VALUES (?, ?, ?)");
+        $stmt->execute([(int)$class_id, $r['student_no'], encodeName($r['name'])]);
+        $existing[$r['student_no']] = true;
+        $imported++;
+    }
+
+    $msg = "成功导入 {$imported} 名学生";
+    if ($skipped > 0) $msg .= "，跳过 {$skipped} 名（学号已存在）";
+    if (!empty($errors)) $msg .= "；格式问题 " . count($errors) . " 处（已跳过）";
+    return ['success' => true, 'message' => $msg, 'imported' => $imported, 'skipped' => $skipped, 'errors' => $errors];
+}
 ?>

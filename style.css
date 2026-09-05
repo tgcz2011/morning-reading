@@ -967,6 +967,47 @@ body {
     color: var(--ink-soft);
 }
 
+/* ---------- 批量导入 ---------- */
+
+.import-box {
+    margin: 0 0 18px;
+    padding: 14px 16px;
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    background: rgba(242,237,224,.45);
+}
+
+.import-title {
+    font-family: var(--serif);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.import-sub {
+    margin: 4px 0 10px;
+    font-size: .82rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+}
+
+.import-preview {
+    margin-top: 6px;
+}
+
+.import-preview .ranking-table {
+    max-height: 320px;
+    overflow-y: auto;
+    display: block;
+}
+
+.import-preview .ranking-table thead,
+.import-preview .ranking-table tbody tr {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+}
+
 /* ---------- 移动端 ---------- */
 
 @media (max-width: 640px) {
