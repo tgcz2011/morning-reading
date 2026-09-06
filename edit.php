@@ -25,7 +25,7 @@ if (!isset($_SESSION['super_logged_in']) || $_SESSION['super_logged_in'] !== tru
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>总管理 - 班级朗读记录系统</title>
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="style.css?v=2">
     </head>
     <body>
         <div class="container">
@@ -136,7 +136,7 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>总管理 - 班级朗读记录系统</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
     <div class="container">

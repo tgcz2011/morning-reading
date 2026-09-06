@@ -33,7 +33,7 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>教师管理 - 班级朗读记录系统</title>
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="style.css?v=2">
     </head>
     <body>
         <div class="container">
@@ -148,7 +148,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>教师管理 - <?php echo getClassName($teacher_class_number); ?></title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
     <div class="container">

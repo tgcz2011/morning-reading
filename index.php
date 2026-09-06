@@ -42,7 +42,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>班级朗读记录系统 - 登录</title>
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="style.css?v=2">
     </head>
     <body>
         <div class="container">
@@ -119,7 +119,7 @@ $students = getStudents();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo getClassName(); ?> · 班级朗读记录系统</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
     <div class="container">

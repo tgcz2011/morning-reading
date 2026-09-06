@@ -93,7 +93,7 @@ if ($other_count > 0) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>统计页面 - <?php echo getClassName(); ?>朗读记录</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
     <script src="chart.umd.min.js"></script>
 </head>
 <body>
