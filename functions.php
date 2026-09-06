@@ -269,16 +269,15 @@ function hasAddedThisSession($student_id) {
 // 记录操作
 // ============================================================
 
-// 检查当前时间段是否有扣分
-function hasPenaltyInCurrentSession($student_id) {
+// 检查本周是否有扣分（不区分早读/晚读，正分优先抵消任意负分）
+function hasPenaltyThisWeek($student_id) {
     $pdo = getDB();
     $current_week = getWeekNumber();
-    $current_type = getCurrentRecordType();
     $class_id = getClassId();
 
     $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM penalty_records 
-                          WHERE class_id = ? AND student_id = ? AND week_number = ? AND record_type = ?");
-    $stmt->execute([$class_id, $student_id, $current_week, $current_type]);
+                          WHERE class_id = ? AND student_id = ? AND week_number = ?");
+    $stmt->execute([$class_id, $student_id, $current_week]);
     $result = $stmt->fetch();
 
     return $result['count'] > 0;
@@ -302,7 +301,7 @@ function addRecord($student_id, $type = null) {
     }
 
     // 检查当前时间段是否有扣分（正分优先补负分）
-    $has_penalty = hasPenaltyInCurrentSession($student_id);
+    $has_penalty = hasPenaltyThisWeek($student_id);
 
     if ($has_penalty) {
         // 先清除当前时间段的扣分记录
@@ -391,7 +390,7 @@ function cancelRecord($student_id, $type = null) {
     return ['success' => false, 'message' => '未找到可取消的记录'];
 }
 
-// 扣分处理（扣分不限次数）
+// 扣分处理（扣分不限次数；扣分优先抵消已有的正分记录，被抵消的正分不进入统计）
 function penalizeStudent($student_id) {
     if (!canRecord()) {
         return ['success' => false, 'message' => '当前不在可记录时间段内'];
@@ -402,6 +401,22 @@ function penalizeStudent($student_id) {
     $current_week = getWeekNumber();
     $current_type = getCurrentRecordType();
 
+    // 扣分优先抵消正分：查本周最新一条未取消的正分记录（不区分早读/晚读）
+    $stmt = $pdo->prepare("SELECT id, record_type FROM reading_records 
+                          WHERE class_id = ? AND student_id = ? AND week_number = ? AND is_canceled = FALSE 
+                          ORDER BY created_at DESC LIMIT 1");
+    $stmt->execute([$class_id, $student_id, $current_week]);
+    $positive_record = $stmt->fetch();
+
+    if ($positive_record) {
+        // 抵消一条正分：标记为已取消，周统计对应计数 -1，不记负分
+        $stmt = $pdo->prepare("UPDATE reading_records SET is_canceled = TRUE WHERE id = ?");
+        $stmt->execute([$positive_record['id']]);
+        updateWeeklyStats($student_id, $current_week, $positive_record['record_type'], -1);
+        return ['success' => true, 'message' => '已抵消一分', 'offset' => true];
+    }
+
+    // 没有正分可抵消：正常扣分（扣分不限次数）
     // 记录扣分时间
     $stmt = $pdo->prepare("INSERT INTO penalty_records (class_id, student_id, week_number, record_type) VALUES (?, ?, ?, ?)");
     $stmt->execute([$class_id, $student_id, $current_week, $current_type]);
@@ -496,7 +511,7 @@ function getStudentStatus($student_id) {
     $net_score = $total_records - $penalty_count;
 
     // 检查当前时间段是否有扣分
-    $has_penalty_in_session = hasPenaltyInCurrentSession($student_id);
+    $has_penalty_in_session = hasPenaltyThisWeek($student_id);
 
     return [
         'today_morning' => $today_morning,

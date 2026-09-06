@@ -186,8 +186,8 @@ $students = getStudents();
                     $penalty_display = '<div class="penalty-display">' . $status['weekly_score'] . '</div>';
                 }
 
-                // 本次朗读已加过分：显示"已加分"小标识
-                $added_chip = $status['session_added'] ? '<span class="added-chip">已加分</span>' : '';
+                // 本次朗读已加过分：显示"已加分"小标识（放在姓名下方，避免挤动姓名）
+                $added_chip = $status['session_added'] ? '<div class="added-chip">已加分</div>' : '';
 
                 // 检查是否在可记录时间内
                 $can_record_now = canRecord();
@@ -198,7 +198,8 @@ $students = getStudents();
                 <div class='{$card_class}' data-student-id='{$id}'>
                     <div class='student-info'>
                         <div class='student-id'>{$no}</div>
-                        <div class='student-name'>{$name}{$added_chip}</div>
+                        <div class='student-name'>{$name}</div>
+                        {$added_chip}
                     </div>
                     <div class='action-buttons'>
                         <button class='action-btn add-btn' onclick='handleAdd({$id})' {$add_disabled}>+</button>
@@ -412,15 +413,15 @@ $students = getStudents();
                 }
             }
 
-            // 更新"已加分"小标识
+            // 更新"已加分"小标识（放在姓名下方）
             let addedChip = card.querySelector('.added-chip');
             if (status.session_added) {
                 if (!addedChip) {
-                    addedChip = document.createElement('span');
+                    addedChip = document.createElement('div');
                     addedChip.className = 'added-chip';
                     addedChip.textContent = '已加分';
-                    const nameDiv = card.querySelector('.student-name');
-                    if (nameDiv) nameDiv.appendChild(addedChip);
+                    const infoDiv = card.querySelector('.student-info');
+                    if (infoDiv) infoDiv.appendChild(addedChip);
                 }
             } else if (addedChip) {
                 addedChip.remove();

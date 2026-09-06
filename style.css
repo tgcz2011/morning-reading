@@ -286,7 +286,8 @@ body {
 
 .added-chip {
     display: inline-block;
-    margin-left: 5px;
+    align-self: flex-start;
+    margin-top: 2px;
     padding: 0 6px 1px;
     font-size: .64rem;
     font-weight: 600;
@@ -294,7 +295,6 @@ body {
     color: var(--amber);
     border: 1px solid currentColor;
     border-radius: 4px;
-    vertical-align: 1px;
     letter-spacing: .1em;
     background: rgba(154,111,18,.08);
 }
