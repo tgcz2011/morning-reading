@@ -259,10 +259,17 @@ function getSemesterWeek($date = null) {
     return (int)floor($days / 7) + 1;
 }
 
-// 本次朗读时段是否已加过分
+// 本次朗读时段是否已加过分（查数据库，包括抵消负分的操作记录；不依赖 session）
 function hasAddedThisSession($student_id) {
-    $key = getCurrentRecordType() . '-' . date('Y-m-d');
-    return isset($_SESSION['session_added'][$student_id]) && $_SESSION['session_added'][$student_id] === $key;
+    $pdo = getDB();
+    $class_id = getClassId();
+    $type = getCurrentRecordType();
+    $today = date('Y-m-d');
+    if (!$type) return false;
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM reading_records 
+                          WHERE class_id = ? AND student_id = ? AND record_date = ? AND record_type = ?");
+    $stmt->execute([$class_id, $student_id, $today, $type]);
+    return (int)$stmt->fetch()['count'] > 0;
 }
 
 // ============================================================
@@ -283,7 +290,7 @@ function hasPenaltyThisWeek($student_id) {
     return $result['count'] > 0;
 }
 
-// 添加记录（加分）
+// 添加记录（加分）——所有状态存数据库，不依赖 session
 function addRecord($student_id, $type = null) {
     if (!canRecord()) {
         return ['success' => false, 'message' => '当前不在可记录时间段内'];
@@ -293,70 +300,54 @@ function addRecord($student_id, $type = null) {
     $class_id = getClassId();
     $type = $type ?: getCurrentRecordType();
     $today = date('Y-m-d');
-    $session_key = $type . '-' . $today;
+    $current_week = getWeekNumber();
 
-    // 一次朗读时间最多加一分：加过分后本次锁定
-    if (isset($_SESSION['session_added'][$student_id]) && $_SESSION['session_added'][$student_id] === $session_key) {
+    // 一次朗读时间最多加一分：今天同时段有任何记录（含抵消负分的操作）即锁定
+    $stmt = $pdo->prepare("SELECT id FROM reading_records 
+                          WHERE class_id = ? AND student_id = ? AND record_date = ? AND record_type = ?");
+    $stmt->execute([$class_id, $student_id, $today, $type]);
+    if ($stmt->fetch()) {
         return ['success' => false, 'message' => '本次朗读已加过分，最多加一分', 'already_added' => true];
     }
 
-    // 检查当前时间段是否有扣分（正分优先补负分）
+    // 检查本周是否有扣分（正分优先抵消负分，不区分时段）
     $has_penalty = hasPenaltyThisWeek($student_id);
 
     if ($has_penalty) {
-        // 先清除当前时间段的扣分记录
-        $current_week = getWeekNumber();
+        // 抵消一条负分：删除本周任意一条扣分记录
         $stmt = $pdo->prepare("DELETE FROM penalty_records 
-                              WHERE class_id = ? AND student_id = ? AND week_number = ? AND record_type = ? 
-                              LIMIT 1");
-        $stmt->execute([$class_id, $student_id, $current_week, $type]);
+                              WHERE class_id = ? AND student_id = ? AND week_number = ? 
+                              ORDER BY id ASC LIMIT 1");
+        $stmt->execute([$class_id, $student_id, $current_week]);
 
         // 更新周统计中的扣分计数
         $stmt = $pdo->prepare("SELECT penalty_count FROM weekly_stats 
                               WHERE class_id = ? AND student_id = ? AND week_number = ?");
         $stmt->execute([$class_id, $student_id, $current_week]);
         $weekly_data = $stmt->fetch();
-
         if ($weekly_data && $weekly_data['penalty_count'] > 0) {
             $stmt = $pdo->prepare("UPDATE weekly_stats SET penalty_count = penalty_count - 1 
                                   WHERE class_id = ? AND student_id = ? AND week_number = ?");
             $stmt->execute([$class_id, $student_id, $current_week]);
         }
 
-        // 锁定本次朗读时段的加分
-        $_SESSION['session_added'][$student_id] = $session_key;
+        // 写一条抵消记录（is_canceled=TRUE，不计入统计，但用于"已加分"锁定和防重复）
+        $stmt = $pdo->prepare("INSERT INTO reading_records 
+                              (class_id, student_id, record_type, record_date, week_number, month_number, semester_week, is_canceled) 
+                              VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)");
+        $stmt->execute([$class_id, $student_id, $type, $today, $current_week, getMonthNumber(), getSemesterWeek()]);
 
         return ['success' => true, 'message' => '已补回一分'];
     }
 
-    // 检查今天是否已经记录过
-    $stmt = $pdo->prepare("SELECT id FROM reading_records 
-                          WHERE class_id = ? AND student_id = ? AND record_date = ? AND record_type = ? AND is_canceled = FALSE");
-    $stmt->execute([$class_id, $student_id, $today, $type]);
-
-    if ($stmt->fetch()) {
-        return ['success' => false, 'message' => '今天已经记录过' . ($type === 'morning' ? '早读' : '晚读'), 'already_added' => true];
-    }
-
-    // 插入新记录
+    // 无负分：插入正常加分记录
     $stmt = $pdo->prepare("INSERT INTO reading_records 
                           (class_id, student_id, record_type, record_date, week_number, month_number, semester_week) 
                           VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([
-        $class_id,
-        $student_id,
-        $type,
-        $today,
-        getWeekNumber(),
-        getMonthNumber(),
-        getSemesterWeek()
-    ]);
+    $stmt->execute([$class_id, $student_id, $type, $today, $current_week, getMonthNumber(), getSemesterWeek()]);
 
     // 更新周统计
-    updateWeeklyStats($student_id, getWeekNumber(), $type, 1);
-
-    // 锁定本次朗读时段的加分
-    $_SESSION['session_added'][$student_id] = $session_key;
+    updateWeeklyStats($student_id, $current_week, $type, 1);
 
     return ['success' => true, 'message' => '记录成功'];
 }
