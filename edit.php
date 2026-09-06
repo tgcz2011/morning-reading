@@ -325,17 +325,25 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                 <div class="stats-note">
                     <strong>说明：</strong>修改后立即对所有班级的首页与记录接口生效；早读/晚读各自"开始"必须早于"结束"。
                 </div>
-                <form method="POST" class="admin-add-form" style="max-width:520px;flex-wrap:wrap;gap:10px;">
+                <form method="POST" class="period-form">
                     <input type="hidden" name="action" value="update_period_settings">
-                    <label class="admin-field-label">早读开始</label>
-                    <input type="time" name="morning_start" class="admin-input" value="<?php echo $ps['morning_start']; ?>" required>
-                    <label class="admin-field-label">早读结束</label>
-                    <input type="time" name="morning_end" class="admin-input" value="<?php echo $ps['morning_end']; ?>" required>
-                    <label class="admin-field-label">晚读开始</label>
-                    <input type="time" name="evening_start" class="admin-input" value="<?php echo $ps['evening_start']; ?>" required>
-                    <label class="admin-field-label">晚读结束</label>
-                    <input type="time" name="evening_end" class="admin-input" value="<?php echo $ps['evening_end']; ?>" required>
-                    <button type="submit" class="admin-btn solid" style="width:100%;margin-top:6px;">保存时段设置</button>
+                    <div class="period-field">
+                        <label>早读开始</label>
+                        <input type="time" name="morning_start" value="<?php echo $ps['morning_start']; ?>" required>
+                    </div>
+                    <div class="period-field">
+                        <label>早读结束</label>
+                        <input type="time" name="morning_end" value="<?php echo $ps['morning_end']; ?>" required>
+                    </div>
+                    <div class="period-field">
+                        <label>晚读开始</label>
+                        <input type="time" name="evening_start" value="<?php echo $ps['evening_start']; ?>" required>
+                    </div>
+                    <div class="period-field">
+                        <label>晚读结束</label>
+                        <input type="time" name="evening_end" value="<?php echo $ps['evening_end']; ?>" required>
+                    </div>
+                    <button type="submit" class="admin-btn solid period-submit">保存时段设置</button>
                 </form>
                 <div class="stats-note" style="margin-top:10px;">
                     当前配置：<?php echo getPeriodRangeText(); ?>

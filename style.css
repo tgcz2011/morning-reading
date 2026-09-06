@@ -224,6 +224,41 @@ body {
     padding-top: 10px;
 }
 
+/* 时段设置表单：每组标签+输入框作为整体，换行不拆开 */
+.period-form {
+    max-width: 560px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 18px;
+    align-items: flex-end;
+}
+.period-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 120px;
+    min-width: 120px;
+}
+.period-field label {
+    font-size: .85rem;
+    color: var(--ink-soft);
+}
+.period-field input[type="time"] {
+    padding: 10px 12px;
+    font-size: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    width: 100%;
+    box-sizing: border-box;
+}
+.period-submit {
+    flex: 1 1 100%;
+    width: 100%;
+    margin-top: 4px;
+}
+
 .login-hint {
     margin-top: 16px;
     font-size: .8rem;
