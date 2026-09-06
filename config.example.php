@@ -31,21 +31,6 @@ $semester_starts = [
     '2027-09-01',
 ];
 
-// 默认学生名单（学号 => 姓名），仅当某班还没有任何学生时写入该班
-// 例如：$default_students = [1 => '张三', 2 => '李四']; 空值 '' 表示跳过该学号
-// 姓名会被自动 base64 转码后存储（name_encoded 列），不受数据库不支持中文的限制
-$default_students = [
-    1 => '马欣怡', 2 => '王雨洁', 3 => '王烁', 4 => '韦思萱', 5 => '韦蒋昀',
-    6 => '', 7 => '卢泺逸', 8 => '包国宏', 9 => '许昊林', 10 => '杜加烨',
-    11 => '李锦程', 12 => '吴舒恺', 13 => '何雨轩', 14 => '张京达', 15 => '',
-    16 => '张雅雯', 17 => '张静以', 18 => '', 19 => '陈书瑶', 20 => '陈彦均',
-    21 => '陈慧笑', 22 => '金圣涵', 23 => '郑宸睿', 24 => '郑熙楚', 25 => '单皓莮',
-    26 => '赵奕欣', 27 => '胡知行', 28 => '胡晨刚', 29 => '俞舒嫣', 30 => '钱俊豪',
-    31 => '徐晟轩', 32 => '徐婧怡', 33 => '徐澄汐', 34 => '郭博涛', 35 => '曹一宸',
-    36 => '康哲铭', 37 => '章宸', 38 => '斯展', 39 => '楼弈天', 40 => '楼湖城',
-    41 => '蔡铭炜'
-];
-
 // 创建数据库连接
 function getDB() {
     try {
@@ -175,23 +160,6 @@ function initDatabase() {
         $initial_pwd = 'admin' . str_pad($n, 2, '0', STR_PAD_LEFT);
         $stmt = $pdo->prepare("INSERT IGNORE INTO classes (class_number, password, teacher_password) VALUES (?, ?, ?)");
         $stmt->execute([$n, $initial_pwd, $initial_pwd]);
-    }
-
-    // 种子：四班预置默认学生名单（其他班由老师在管理界面添加）
-    $stmt = $pdo->prepare("SELECT id FROM classes WHERE class_number = 4");
-    $stmt->execute();
-    $class4 = $stmt->fetch();
-    if ($class4) {
-        $stmt = $pdo->prepare("SELECT COUNT(*) AS c FROM students WHERE class_id = ?");
-        $stmt->execute([$class4['id']]);
-        if ((int)$stmt->fetch()['c'] === 0) {
-            global $default_students;
-            foreach ($default_students as $no => $name) {
-                if ($name === '') continue;
-                $stmt = $pdo->prepare("INSERT INTO students (class_id, student_no, name_encoded) VALUES (?, ?, ?)");
-                $stmt->execute([$class4['id'], (int)$no, encodeName($name)]);
-            }
-        }
     }
 }
 ?>
