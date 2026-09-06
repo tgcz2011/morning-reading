@@ -218,10 +218,25 @@ function canRecord() {
            ($current_minutes >= $es && $current_minutes <= $ee);
 }
 
-// 获取当前记录类型 (早读/晚读)
+// 获取当前记录类型 (早读/晚读)——根据 settings 配置的时段判断，非记录时段返回 null
 function getCurrentRecordType() {
-    $current_hour = (int)date('H');
-    return ($current_hour < 12) ? 'morning' : 'evening';
+    $current_minutes = (int)date('H') * 60 + (int)date('i');
+    $s = getPeriodSettings();
+    list($h, $m) = explode(':', $s['morning_start']);
+    $ms = (int)$h * 60 + (int)$m;
+    list($h, $m) = explode(':', $s['morning_end']);
+    $me = (int)$h * 60 + (int)$m;
+    list($h, $m) = explode(':', $s['evening_start']);
+    $es = (int)$h * 60 + (int)$m;
+    list($h, $m) = explode(':', $s['evening_end']);
+    $ee = (int)$h * 60 + (int)$m;
+    if ($current_minutes >= $ms && $current_minutes <= $me) {
+        return 'morning';
+    }
+    if ($current_minutes >= $es && $current_minutes <= $ee) {
+        return 'evening';
+    }
+    return null;
 }
 
 // 获取周数

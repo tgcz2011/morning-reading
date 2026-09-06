@@ -5,6 +5,9 @@
 // config.php 含数据库与登录密码，已被 .gitignore 排除，禁止入库
 // ============================================================
 
+// 强制使用北京时间（服务器默认 UTC 会导致时段判断偏差 8 小时）
+date_default_timezone_set('Asia/Shanghai');
+
 // 数据库配置
 define('DB_HOST', '请填写数据库主机');
 define('DB_USER', '请填写数据库用户名');

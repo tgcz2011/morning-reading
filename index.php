@@ -130,7 +130,7 @@ $students = getStudents();
             </div>
             <div class="time-info">
                 <?php echo date('Y年m月d日 H:i'); ?> · 第<?php echo getWeekNumber(); ?>周
-                <?php echo ' · ' . (getCurrentRecordType() === 'morning' ? '早读' : '晚读'); ?>
+                <?php $ct = getCurrentRecordType(); if ($ct) echo ' · ' . ($ct === 'morning' ? '早读' : '晚读'); ?>
             </div>
         </div>
 
@@ -405,7 +405,7 @@ $students = getStudents();
                 card.classList.add('penalized');
             } else {
                 // 没有负分且当前时间段没有扣分，正常显示
-                const currentType = '<?php echo getCurrentRecordType(); ?>';
+                const currentType = <?php $ct = getCurrentRecordType(); echo $ct ? "'$ct'" : 'null'; ?>;
                 if ((currentType === 'morning' && status.today_morning) ||
                     (currentType === 'evening' && status.today_evening)) {
                     card.classList.add('recorded');
