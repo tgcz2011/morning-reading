@@ -1170,3 +1170,37 @@ body {
         transition: none !important;
     }
 }
+
+/* ---------- 页脚（作者/版本/许可） ---------- */
+
+.site-footer {
+    margin-top: 40px;
+    padding: 20px 16px 16px;
+    border-top: 1px solid var(--ink-faint, #c8c0b0);
+    text-align: center;
+    font-size: .78rem;
+    line-height: 1.8;
+    color: var(--ink-faint, #8a8272);
+}
+
+.site-footer .footer-title {
+    font-weight: 600;
+    color: var(--ink, #26241f);
+    font-size: .82rem;
+    margin-bottom: 2px;
+}
+
+.site-footer a {
+    color: var(--accent-red, #C43A2C);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--accent-red, #C43A2C);
+}
+
+.site-footer a:hover {
+    border-bottom-style: solid;
+}
+
+.site-footer .footer-sep {
+    margin: 0 6px;
+    color: var(--ink-faint, #c8c0b0);
+}

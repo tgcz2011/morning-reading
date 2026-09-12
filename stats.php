@@ -98,7 +98,7 @@ if ($other_count > 0) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>统计页面 - <?php echo getClassName(); ?>朗读记录</title>
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
     <script src="chart.umd.min.js"></script>
 </head>
 <body>
@@ -277,5 +277,20 @@ if ($other_count > 0) {
             .catch(function() {});
     }, 300000);
     </script>
+    <footer class="site-footer">
+        <div class="footer-title">班级朗读记录系统 v<?php echo APP_VERSION; ?></div>
+        <div>
+            作者：<?php echo APP_AUTHOR; ?>
+            <span class="footer-sep">·</span>
+            技术支持：豆包（Doubao）
+            <span class="footer-sep">·</span>
+            GPL-3.0 许可
+        </div>
+        <div>
+            <a href="<?php echo APP_REPO; ?>" target="_blank" rel="noopener">GitHub 仓库</a>
+            <span class="footer-sep">·</span>
+            问题反馈：<a href="<?php echo APP_REPO; ?>/issues" target="_blank" rel="noopener">GitHub Issues</a>
+        </div>
+    </footer>
 </body>
 </html>

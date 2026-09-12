@@ -25,6 +25,11 @@ define('CLASS_COUNT', 14);
 // 数据库结构版本：每次表结构/种子变更时递增，initDatabase 据此跳过已完成的初始化
 define('DB_VERSION', 5);
 
+// 项目版本号（a.b.c.d：d=小改动/修复，c=小添加，b=大改，a=大添加）
+define('APP_VERSION', '1.0.0.0');
+define('APP_AUTHOR', '陈彦均');
+define('APP_REPO', 'https://github.com/tgcz2011/morning-reading');
+
 // 年级列表：7=初一 8=初二 9=初三（原有年级）10=高一 11=高二 12=高三
 function gradeList() {
     return [7 => '初一', 8 => '初二', 9 => '初三', 10 => '高一', 11 => '高二', 12 => '高三'];

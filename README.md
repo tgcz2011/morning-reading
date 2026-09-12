@@ -140,3 +140,25 @@ A: 访问总管理界面 `edit.php`，在「时段设置」中修改。修改后
 
 **Q: 数据库不支持中文怎么办？**
 A: 学生姓名以 base64 存储于 `name_encoded` 列，读取时自动解码，数据库字符集不支持中文也不影响。
+
+## 版本号规则
+
+`a.b.c.d`：d=小改动/修复，c=小添加，b=大改，a=大添加；去掉点后数值严格递增。
+
+当前版本：**v1.0.0.0**（首个正式版：多班级多年级、单会话登录、Excel 批量导入、统计排行、时段可配置）。
+
+## 作者与鸣谢
+
+- **作者**：陈彦均（东阳市外国语学校）
+- **技术支持**：豆包（Doubao）—— 提供全栈开发与代码审查支持
+- **GitHub**：[tgcz2011](https://github.com/tgcz2011)
+- **个人主页**：[zztool.free.nf](https://zztool.free.nf)
+
+## 问题反馈
+
+- **GitHub Issues**：[tgcz2011/morning-reading/issues](https://github.com/tgcz2011/morning-reading/issues)
+- 反馈时请注明版本号（页面底部可见）、操作步骤和错误现象。
+
+## License
+
+GPL-3.0，见 [LICENSE](LICENSE)。

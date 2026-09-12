@@ -34,7 +34,7 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>教师管理 - 班级朗读记录系统</title>
-        <link rel="stylesheet" href="style.css?v=2">
+        <link rel="stylesheet" href="style.css?v=3">
     </head>
     <body>
         <div class="container">
@@ -76,6 +76,21 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
                 </script>
             </div>
         </div>
+        <footer class="site-footer">
+            <div class="footer-title">班级朗读记录系统 v<?php echo APP_VERSION; ?></div>
+            <div>
+                作者：<?php echo APP_AUTHOR; ?>
+                <span class="footer-sep">·</span>
+                技术支持：豆包（Doubao）
+                <span class="footer-sep">·</span>
+                GPL-3.0 许可
+            </div>
+            <div>
+                <a href="<?php echo APP_REPO; ?>" target="_blank" rel="noopener">GitHub 仓库</a>
+                <span class="footer-sep">·</span>
+                问题反馈：<a href="<?php echo APP_REPO; ?>/issues" target="_blank" rel="noopener">GitHub Issues</a>
+            </div>
+        </footer>
     </body>
     </html>
     <?php
@@ -170,7 +185,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>教师管理 - <?php echo getClassName($teacher_class_number, getTeacherGrade()); ?></title>
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
     <div class="container">
@@ -406,5 +421,20 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                 .catch(function() {});
         }, 1800000);
     </script>
+    <footer class="site-footer">
+        <div class="footer-title">班级朗读记录系统 v<?php echo APP_VERSION; ?></div>
+        <div>
+            作者：<?php echo APP_AUTHOR; ?>
+            <span class="footer-sep">·</span>
+            技术支持：豆包（Doubao）
+            <span class="footer-sep">·</span>
+            GPL-3.0 许可
+        </div>
+        <div>
+            <a href="<?php echo APP_REPO; ?>" target="_blank" rel="noopener">GitHub 仓库</a>
+            <span class="footer-sep">·</span>
+            问题反馈：<a href="<?php echo APP_REPO; ?>/issues" target="_blank" rel="noopener">GitHub Issues</a>
+        </div>
+    </footer>
 </body>
 </html>
