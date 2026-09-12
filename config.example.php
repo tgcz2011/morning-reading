@@ -23,7 +23,7 @@ define('SUPERADMIN_PASSWORD', '请填写总管理密码');
 define('CLASS_COUNT', 14);
 
 // 数据库结构版本：每次表结构/种子变更时递增，initDatabase 据此跳过已完成的初始化
-define('DB_VERSION', 4);
+define('DB_VERSION', 5);
 
 // 年级列表：7=初一 8=初二 9=初三（原有年级）10=高一 11=高二 12=高三
 function gradeList() {
@@ -108,6 +108,7 @@ function initDatabase() {
         class_number INT NOT NULL,
         password VARCHAR(64) NOT NULL,
         teacher_password VARCHAR(64) NOT NULL DEFAULT '',
+        active_session_token VARCHAR(64) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uk_grade_class (grade, class_number)
     ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -135,6 +136,10 @@ function initDatabase() {
             $pdo->exec("ALTER TABLE classes DROP INDEX class_number, ADD UNIQUE KEY uk_grade_class (grade, class_number)");
         } elseif (!$has_uk) {
             $pdo->exec("ALTER TABLE classes ADD UNIQUE KEY uk_grade_class (grade, class_number)");
+        }
+        // 迁移④：老库没有 active_session_token 列时补列（单会话登录用）
+        if (!in_array('active_session_token', $cols)) {
+            $pdo->exec("ALTER TABLE classes ADD COLUMN active_session_token VARCHAR(64) NULL AFTER teacher_password");
         }
     } catch (PDOException $e) {
         // 表不存在时忽略（上面已建表）
@@ -164,8 +169,28 @@ function initDatabase() {
         INDEX idx_class_student_date (class_id, student_id, record_date),
         INDEX idx_class_date_type (class_id, record_date, record_type),
         INDEX idx_class_week (class_id, week_number),
-        INDEX idx_class_month (class_id, month_number)
+        INDEX idx_class_month (class_id, month_number),
+        UNIQUE KEY uk_student_date_type (class_id, student_id, record_date, record_type)
     ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // 迁移：老库 reading_records 没有唯一索引时补加（数据库层面防重复加分兜底）
+    try {
+        $idx = $pdo->query("SHOW INDEX FROM reading_records")->fetchAll(PDO::FETCH_ASSOC);
+        $has_uk = false;
+        foreach ($idx as $ix) {
+            if ($ix['Key_name'] === 'uk_student_date_type') { $has_uk = true; break; }
+        }
+        if (!$has_uk) {
+            // 先清理可能存在的重复数据（保留最新的一条），再加唯一索引
+            $pdo->exec("DELETE t1 FROM reading_records t1 INNER JOIN reading_records t2 
+                        WHERE t1.class_id=t2.class_id AND t1.student_id=t2.student_id 
+                        AND t1.record_date=t2.record_date AND t1.record_type=t2.record_type 
+                        AND t1.id < t2.id");
+            $pdo->exec("ALTER TABLE reading_records ADD UNIQUE KEY uk_student_date_type (class_id, student_id, record_date, record_type)");
+        }
+    } catch (PDOException $e) {
+        // 表不存在或加索引失败时忽略
+    }
 
     // 周统计表
     $pdo->exec("CREATE TABLE IF NOT EXISTS weekly_stats (

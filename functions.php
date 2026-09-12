@@ -25,6 +25,23 @@ function checkAuth() {
         header('Location: index.php');
         exit;
     }
+    // 单会话校验：当前 session token 必须等于班级记录中的 active_session_token
+    // 不一致说明另一设备已登录，当前会话被踢下线
+    $class_id = (int)$_SESSION['class_id'];
+    $stmt = getDB()->prepare("SELECT active_session_token FROM classes WHERE id = ?");
+    $stmt->execute([$class_id]);
+    $db_token = $stmt->fetchColumn();
+    if ($db_token === false || $db_token !== ($_SESSION['session_token'] ?? '')) {
+        session_unset();
+        session_destroy();
+        if (isset($_POST['ajax_action'])) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => '该班级已在其他设备登录，当前会话已下线', 'kicked' => true]);
+            exit;
+        }
+        header('Location: index.php?kicked=1');
+        exit;
+    }
 }
 
 // 检查教师管理登录状态（教师只能管理自己所在班级；有效期 7 天）
@@ -56,10 +73,14 @@ function login($grade, $class_number, $password) {
     $stmt->execute([(int)$grade, (int)$class_number]);
     $class = $stmt->fetch();
     if ($class && hash_equals($class['password'], $password)) {
+        // 单会话：生成唯一 token，写入班级记录（后登录踢掉先登录）
+        $token = bin2hex(random_bytes(32));
+        $pdo->prepare("UPDATE classes SET active_session_token = ? WHERE id = ?")->execute([$token, (int)$class['id']]);
         $_SESSION['logged_in'] = true;
         $_SESSION['class_id'] = (int)$class['id'];
         $_SESSION['class_number'] = (int)$class['class_number'];
         $_SESSION['grade'] = (int)$class['grade'];
+        $_SESSION['session_token'] = $token;
         $_SESSION['login_time'] = time(); // 记录页登录有效期 3 小时
         return true;
     }
@@ -712,6 +733,51 @@ function getPositiveStatistics($period = 'week') {
     }
 
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// 合并统计：一次查询同时返回表格数据（含负分净分）和正分数据（饼图用）
+// 替代 getStatistics + getPositiveStatistics 两次重复查询
+function getStatisticsCombined($period = 'week') {
+    $pdo = getDB();
+    $class_id = getClassId();
+    $current_week = getWeekNumber();
+    $current_month = getMonthNumber();
+    $table = [];    // 排行榜表格（week=净分，其余=正分计数）
+    $positive = []; // 饼图正分（不含负分）
+
+    if ($period === 'week') {
+        // 本周：一次查 weekly_stats，PHP 端分别算净分和正分
+        $stmt = $pdo->prepare("SELECT student_id, morning_count, evening_count, penalty_count
+                                FROM weekly_stats WHERE class_id = ? AND week_number = ?");
+        $stmt->execute([$class_id, $current_week]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $sid = (int)$r['student_id'];
+            $pos = (int)$r['morning_count'] + (int)$r['evening_count'];
+            $table[] = ['student_id' => $sid, 'score' => $pos - (int)$r['penalty_count']];
+            if ($pos > 0) $positive[] = ['student_id' => $sid, 'score' => $pos];
+        }
+    } else {
+        // 今日/本月/学期/总统计：只计正分，table 和 positive 完全相同，一次查询即可
+        $where = "class_id = ? AND is_canceled = FALSE";
+        $params = [$class_id];
+        if ($period === 'day') {
+            $where .= " AND record_date = ?"; $params[] = date('Y-m-d');
+        } elseif ($period === 'month') {
+            $where .= " AND month_number = ?"; $params[] = $current_month;
+        } elseif ($period === 'semester') {
+            $where .= " AND record_date >= ?"; $params[] = getSemesterStart();
+        }
+        $stmt = $pdo->prepare("SELECT student_id, COUNT(*) as cnt FROM reading_records
+                                WHERE $where GROUP BY student_id");
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $sid = (int)$r['student_id'];
+            $cnt = (int)$r['cnt'];
+            $table[] = ['student_id' => $sid, 'score' => $cnt];
+            $positive[] = ['student_id' => $sid, 'score' => $cnt];
+        }
+    }
+    return ['table' => $table, 'positive' => $positive];
 }
 
 // ============================================================

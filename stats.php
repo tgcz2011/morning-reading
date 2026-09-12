@@ -26,10 +26,10 @@ $period_names = [
     'total' => '总统计'
 ];
 
-// 获取统计数据（用于表格，周统计含负分，其余为正分计数）
-$stats_data = getStatistics($period);
-// 获取正分统计数据（用于饼状图，不包含负分）
-$positive_stats_data = getPositiveStatistics($period);
+// 获取统计数据（一次查询同时返回表格数据和正分数据，避免重复查询）
+$combined = getStatisticsCombined($period);
+$stats_data = $combined['table'];
+$positive_stats_data = $combined['positive'];
 
 $student_map = getStudentMap();
 

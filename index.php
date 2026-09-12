@@ -3,6 +3,14 @@ require_once 'functions.php';
 
 // 退出登录
 if (isset($_GET['logout'])) {
+    // 清空班级的 active_session_token（释放单会话锁）
+    if (isset($_SESSION['class_id'])) {
+        try {
+            getDB()->prepare("UPDATE classes SET active_session_token = NULL WHERE id = ?")
+                ->execute([(int)$_SESSION['class_id']]);
+        } catch (Exception $e) {}
+    }
+    session_unset();
     session_destroy();
     header('Location: index.php');
     exit;
@@ -57,6 +65,9 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($
                 <h2>选择年级、输入班级号并登录</h2>
                 <?php if (isset($error)): ?>
                     <div class="message error"><?php echo $error; ?></div>
+                <?php endif; ?>
+                <?php if (isset($_GET['kicked'])): ?>
+                    <div class="message error">该班级已在其他设备登录，当前会话已下线</div>
                 <?php endif; ?>
                 <?php $sel_grade = isset($grade) ? $grade : 9; ?>
                 <form method="POST">
@@ -346,6 +357,7 @@ $all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学
             .then(response => response.json())
             .then(data => {
                 endAction(studentId);
+                if (data.kicked) { window.location.href = 'index.php?kicked=1'; return; }
                 if (data.status) updateStudentCard(studentId, data.status);
 
                 if (data.success) {
@@ -398,6 +410,7 @@ $all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学
             .then(response => response.json())
             .then(data => {
                 endAction(studentId);
+                if (data.kicked) { window.location.href = 'index.php?kicked=1'; return; }
                 if (data.status) updateStudentCard(studentId, data.status);
 
                 if (data.success) {
