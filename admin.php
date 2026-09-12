@@ -158,6 +158,8 @@ $stmt = getDB()->prepare("SELECT * FROM classes WHERE id = ?");
 $stmt->execute([$teacher_class_id]);
 $class_info = $stmt->fetch();
 $students = getStudents($teacher_class_id);
+// 教师管理登录剩余秒数（7天过期，浏览器端 performance.now() 倒计时）
+$admin_remaining = max(0, 7 * 86400 - (time() - $_SESSION['teacher_login_time']));
 
 // 待确认的导入预览（会话中）
 $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESSION['import_preview'][$teacher_class_id] : null;
@@ -387,13 +389,22 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
             if (ok) form.submit();
         }
 
-        // 心跳：每5分钟检查教师管理登录状态（7天过期），过期自动跳转
+        // 登录倒计时：performance.now() 单调时钟，不受系统时间修改影响，到期立即跳转
+        var adminRemainingMs = <?php echo $admin_remaining * 1000; ?>;
+        var adminPageLoadTime = performance.now();
+        setInterval(function() {
+            if (performance.now() - adminPageLoadTime >= adminRemainingMs) {
+                window.location.href = 'admin.php';
+            }
+        }, 1000);
+
+        // 心跳兜底：每30分钟检查一次（7天过期，提前过期概率低）
         setInterval(function() {
             fetch('heartbeat.php?type=admin', {cache: 'no-store'})
                 .then(function(r) { return r.json(); })
                 .then(function(d) { if (d.expired) window.location.href = d.redirect; })
                 .catch(function() {});
-        }, 300000);
+        }, 1800000);
     </script>
 </body>
 </html>

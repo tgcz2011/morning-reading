@@ -144,6 +144,8 @@ if (isset($_SESSION['message'])) {
 
 $students = getStudents();
 $all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学生 3×N 次
+// 登录剩余秒数（页面打开时从服务器取一次，浏览器端用 performance.now() 倒计时，不受系统时间修改影响）
+$login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -477,13 +479,23 @@ $all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学
             }
         }
 
-        // 心跳：每60秒检查登录状态，过期自动跳转（避免"记一半登录过期却还在主页"的假死状态）
+        // 登录倒计时：页面打开时从服务器取剩余时间，用 performance.now() 单调时钟倒计时
+        // performance.now() 不受系统时间修改影响，到期立即跳转
+        var loginRemainingMs = <?php echo $login_remaining * 1000; ?>;
+        var pageLoadTime = performance.now();
+        setInterval(function() {
+            if (performance.now() - pageLoadTime >= loginRemainingMs) {
+                window.location.href = 'index.php';
+            }
+        }, 1000);
+
+        // 心跳兜底：每5分钟检查一次（处理服务器session提前过期、单会话被踢等倒计时检测不到的情况）
         setInterval(function() {
             fetch('heartbeat.php?type=record', {cache: 'no-store'})
                 .then(function(r) { return r.json(); })
                 .then(function(d) { if (d.expired) window.location.href = d.redirect; })
                 .catch(function() {});
-        }, 60000);
+        }, 300000);
 
         // 防止右键菜单
         document.addEventListener('contextmenu', function(e) {

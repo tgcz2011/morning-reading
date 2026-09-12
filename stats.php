@@ -10,6 +10,8 @@ if (isset($_GET['logout'])) {
 
 initDatabase();
 checkAuth();
+// 登录剩余秒数（浏览器端 performance.now() 倒计时，不受系统时间修改影响）
+$stats_login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
 
 // 获取统计周期
 $period = isset($_GET['period']) ? $_GET['period'] : 'week';
@@ -256,13 +258,21 @@ if ($other_count > 0) {
         </div>
     </div>
     <script>
-    // 心跳：每60秒检查登录状态，过期自动跳转
+    // 登录倒计时：performance.now() 单调时钟，不受系统时间修改影响，到期立即跳转
+    var statsRemainingMs = <?php echo $stats_login_remaining * 1000; ?>;
+    var statsPageLoadTime = performance.now();
+    setInterval(function() {
+        if (performance.now() - statsPageLoadTime >= statsRemainingMs) {
+            window.location.href = 'index.php';
+        }
+    }, 1000);
+    // 心跳兜底：每5分钟检查一次
     setInterval(function() {
         fetch('heartbeat.php?type=record', {cache: 'no-store'})
             .then(function(r) { return r.json(); })
             .then(function(d) { if (d.expired) window.location.href = d.redirect; })
             .catch(function() {});
-    }, 60000);
+    }, 300000);
     </script>
 </body>
 </html>
