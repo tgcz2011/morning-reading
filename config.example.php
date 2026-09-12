@@ -33,6 +33,14 @@ function gradeName($grade) {
     return isset($list[(int)$grade]) ? $list[(int)$grade] : '';
 }
 
+// 每个年级的班级数：初中（初一/初二/初三）14 个班，高中（高一/高二/高三）11 个班
+function gradeClassCount($grade) {
+    $grade = (int)$grade;
+    if ($grade >= 7 && $grade <= 9) return 14;  // 初中
+    if ($grade >= 10 && $grade <= 12) return 11; // 高中
+    return 0;
+}
+
 // 学期开始日期：学期统计按此日期分割
 // 统计时取「当前日期之前最近的一个日期」作为本学期起点
 $semester_starts = [
@@ -186,13 +194,30 @@ function initDatabase() {
         $stmt->execute([$k, $v]);
     }
 
-    // 种子：每个年级创建 CLASS_COUNT 个班，班级密码与教师管理密码初始相同 = admin + 两位班级号（一班=admin01）
+    // 种子：每个年级创建对应数量的班（初中14个，高中11个），初始密码 = admin + 两位班级号
     $stmt = $pdo->prepare("INSERT IGNORE INTO classes (grade, class_number, password, teacher_password) VALUES (?, ?, ?, ?)");
     foreach (array_keys(gradeList()) as $grade) {
-        for ($n = 1; $n <= CLASS_COUNT; $n++) {
+        $cnt = gradeClassCount($grade);
+        for ($n = 1; $n <= $cnt; $n++) {
             $initial_pwd = 'admin' . str_pad($n, 2, '0', STR_PAD_LEFT);
             $stmt->execute([$grade, $n, $initial_pwd, $initial_pwd]);
         }
+    }
+
+    // 清理：高中实际只有11个班，删除早期误建的高中12-14班（仅当该班无学生无记录时，安全兜底）
+    try {
+        $toDelete = $pdo->query("SELECT c.id FROM classes c
+            WHERE c.grade IN (10,11,12) AND c.class_number > 11
+            AND NOT EXISTS (SELECT 1 FROM students s WHERE s.class_id=c.id)
+            AND NOT EXISTS (SELECT 1 FROM reading_records r WHERE r.class_id=c.id)
+            AND NOT EXISTS (SELECT 1 FROM penalty_records p WHERE p.class_id=c.id)")
+            ->fetchAll(PDO::FETCH_COLUMN);
+        if (!empty($toDelete)) {
+            $ids = implode(',', array_map('intval', $toDelete));
+            $pdo->exec("DELETE FROM classes WHERE id IN ($ids)");
+        }
+    } catch (PDOException $e) {
+        // 表结构未就绪时忽略
     }
 }
 ?>

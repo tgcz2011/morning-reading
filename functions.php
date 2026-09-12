@@ -702,6 +702,12 @@ function addStudent($class_id, $student_no, $name) {
         return ['success' => false, 'message' => '姓名不能为空'];
     }
     $pdo = getDB();
+    // 检查学号是否已存在（防止手动添加重复学号；导入流程已有去重）
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM students WHERE class_id = ? AND student_no = ?");
+    $stmt->execute([(int)$class_id, (int)$student_no]);
+    if ((int)$stmt->fetchColumn() > 0) {
+        return ['success' => false, 'message' => "学号 {$student_no} 已存在，请使用其他学号，或在下方列表中直接修改该生姓名"];
+    }
     $stmt = $pdo->prepare("INSERT INTO students (class_id, student_no, name_encoded) VALUES (?, ?, ?)");
     $stmt->execute([(int)$class_id, (int)$student_no, encodeName($name)]);
     return ['success' => true, 'message' => '已添加学生 ' . $name];

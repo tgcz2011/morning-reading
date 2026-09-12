@@ -51,16 +51,29 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
                 <?php endif; ?>
                 <?php $sel_grade = isset($grade) ? $grade : 9; ?>
                 <form method="POST">
-                    <select name="grade" class="login-input" required>
+                    <select name="grade" id="gradeSelect" class="login-input" required>
                         <?php foreach (gradeList() as $g => $gname): ?>
                             <option value="<?php echo $g; ?>" <?php echo $g === $sel_grade ? 'selected' : ''; ?>><?php echo $gname; ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <input type="number" name="class_number" class="login-input" placeholder="班级号，如 01" min="1" max="<?php echo CLASS_COUNT; ?>" required>
+                    <input type="number" name="class_number" id="classNumberInput" class="login-input" placeholder="班级号，如 01" min="1" max="14" required>
                     <input type="password" name="password" placeholder="教师管理密码" required>
                     <button type="submit" name="teacher_login">进入管理</button>
                 </form>
-                <p class="login-hint">先选年级，再填班级号：一班 = 01，二班 = 02，以此类推<br>教师管理密码与班级登录密码分开，初始相同（admin + 班级号）<br>忘记密码可联系总管理重置</p>
+                <p class="login-hint">先选年级，再填班级号：初中 01-14，高中 01-11<br>教师管理密码与班级登录密码分开，初始相同（admin + 班级号）<br>忘记密码可联系总管理重置</p>
+                <script>
+                (function(){
+                    var sel = document.getElementById('gradeSelect');
+                    var inp = document.getElementById('classNumberInput');
+                    function syncMax(){
+                        var g = parseInt(sel.value, 10);
+                        inp.max = (g >= 7 && g <= 9) ? 14 : 11;
+                        if (inp.value && parseInt(inp.value, 10) > parseInt(inp.max, 10)) inp.value = '';
+                    }
+                    sel.addEventListener('change', syncMax);
+                    syncMax();
+                })();
+                </script>
             </div>
         </div>
     </body>
