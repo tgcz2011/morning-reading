@@ -358,6 +358,7 @@ $all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学
             .then(data => {
                 endAction(studentId);
                 if (data.kicked) { window.location.href = 'index.php?kicked=1'; return; }
+                if (data.expired) { window.location.href = 'index.php'; return; }
                 if (data.status) updateStudentCard(studentId, data.status);
 
                 if (data.success) {
@@ -411,6 +412,7 @@ $all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学
             .then(data => {
                 endAction(studentId);
                 if (data.kicked) { window.location.href = 'index.php?kicked=1'; return; }
+                if (data.expired) { window.location.href = 'index.php'; return; }
                 if (data.status) updateStudentCard(studentId, data.status);
 
                 if (data.success) {
@@ -474,6 +476,14 @@ $all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学
                 penaltyDisplay.remove();
             }
         }
+
+        // 心跳：每60秒检查登录状态，过期自动跳转（避免"记一半登录过期却还在主页"的假死状态）
+        setInterval(function() {
+            fetch('heartbeat.php?type=record', {cache: 'no-store'})
+                .then(function(r) { return r.json(); })
+                .then(function(d) { if (d.expired) window.location.href = d.redirect; })
+                .catch(function() {});
+        }, 60000);
 
         // 防止右键菜单
         document.addEventListener('contextmenu', function(e) {

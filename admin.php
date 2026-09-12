@@ -386,6 +386,14 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
             const ok = await askConfirm(title, desc);
             if (ok) form.submit();
         }
+
+        // 心跳：每5分钟检查教师管理登录状态（7天过期），过期自动跳转
+        setInterval(function() {
+            fetch('heartbeat.php?type=admin', {cache: 'no-store'})
+                .then(function(r) { return r.json(); })
+                .then(function(d) { if (d.expired) window.location.href = d.redirect; })
+                .catch(function() {});
+        }, 300000);
     </script>
 </body>
 </html>

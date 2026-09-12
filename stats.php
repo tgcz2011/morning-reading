@@ -255,5 +255,14 @@ if ($other_count > 0) {
             <?php endif; ?>
         </div>
     </div>
+    <script>
+    // 心跳：每60秒检查登录状态，过期自动跳转
+    setInterval(function() {
+        fetch('heartbeat.php?type=record', {cache: 'no-store'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { if (d.expired) window.location.href = d.redirect; })
+            .catch(function() {});
+    }, 60000);
+    </script>
 </body>
 </html>

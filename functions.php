@@ -19,7 +19,7 @@ function checkAuth() {
         session_destroy();
         if (isset($_POST['ajax_action'])) {
             header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => '登录已过期，请重新登录']);
+            echo json_encode(['success' => false, 'message' => '登录已过期，请重新登录', 'expired' => true]);
             exit;
         }
         header('Location: index.php');
