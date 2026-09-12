@@ -102,7 +102,8 @@ function getClassNumber() {
 }
 
 function getGrade() {
-    return (int)$_SESSION['grade'];
+    // 旧会话（迁移前登录）没有 grade，老数据本就是初三，缺省回退 9
+    return isset($_SESSION['grade']) ? (int)$_SESSION['grade'] : 9;
 }
 
 // 教师当前管理的班级 ID / 班号
@@ -115,7 +116,7 @@ function getTeacherClassNumber() {
 }
 
 function getTeacherGrade() {
-    return (int)$_SESSION['teacher_grade'];
+    return isset($_SESSION['teacher_grade']) ? (int)$_SESSION['teacher_grade'] : 9;
 }
 
 // 班级显示名：初三一班 / 高一三班（年级 + 中文班号 + 班）
