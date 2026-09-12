@@ -49,32 +49,34 @@ function checkSuperAuth() {
     }
 }
 
-// 班级登录（班级号 + 班级密码）
-function login($class_number, $password) {
+// 班级登录（年级 + 班级号 + 班级密码）
+function login($grade, $class_number, $password) {
     $pdo = getDB();
-    $stmt = $pdo->prepare("SELECT * FROM classes WHERE class_number = ?");
-    $stmt->execute([(int)$class_number]);
+    $stmt = $pdo->prepare("SELECT * FROM classes WHERE grade = ? AND class_number = ?");
+    $stmt->execute([(int)$grade, (int)$class_number]);
     $class = $stmt->fetch();
     if ($class && hash_equals($class['password'], $password)) {
         $_SESSION['logged_in'] = true;
         $_SESSION['class_id'] = (int)$class['id'];
         $_SESSION['class_number'] = (int)$class['class_number'];
+        $_SESSION['grade'] = (int)$class['grade'];
         $_SESSION['login_time'] = time(); // 记录页登录有效期 3 小时
         return true;
     }
     return false;
 }
 
-// 教师管理登录（班级号 + 教师管理密码）
-function teacherLogin($class_number, $password) {
+// 教师管理登录（年级 + 班级号 + 教师管理密码）
+function teacherLogin($grade, $class_number, $password) {
     $pdo = getDB();
-    $stmt = $pdo->prepare("SELECT * FROM classes WHERE class_number = ?");
-    $stmt->execute([(int)$class_number]);
+    $stmt = $pdo->prepare("SELECT * FROM classes WHERE grade = ? AND class_number = ?");
+    $stmt->execute([(int)$grade, (int)$class_number]);
     $class = $stmt->fetch();
     if ($class && !empty($class['teacher_password']) && hash_equals($class['teacher_password'], $password)) {
         $_SESSION['teacher_logged_in'] = true;
         $_SESSION['teacher_class_id'] = (int)$class['id'];
         $_SESSION['teacher_class_number'] = (int)$class['class_number'];
+        $_SESSION['teacher_grade'] = (int)$class['grade'];
         $_SESSION['teacher_login_time'] = time(); // 教师页登录有效期 7 天
         return true;
     }
@@ -99,6 +101,10 @@ function getClassNumber() {
     return (int)$_SESSION['class_number'];
 }
 
+function getGrade() {
+    return (int)$_SESSION['grade'];
+}
+
 // 教师当前管理的班级 ID / 班号
 function getTeacherClassId() {
     return (int)$_SESSION['teacher_class_id'];
@@ -108,9 +114,20 @@ function getTeacherClassNumber() {
     return (int)$_SESSION['teacher_class_number'];
 }
 
-function getClassName($number = null) {
-    $number = $number !== null ? (int)$number : getClassNumber();
-    return chineseNumber($number) . '班';
+function getTeacherGrade() {
+    return (int)$_SESSION['teacher_grade'];
+}
+
+// 班级显示名：初三一班 / 高一三班（年级 + 中文班号 + 班）
+function getClassName($number = null, $grade = null) {
+    if ($number === null) {
+        $number = getClassNumber();
+        $grade = $grade !== null ? (int)$grade : getGrade();
+    } else {
+        $number = (int)$number;
+        $grade = $grade !== null ? (int)$grade : 9;
+    }
+    return gradeName($grade) . chineseNumber($number) . '班';
 }
 
 // ============================================================
@@ -647,11 +664,11 @@ function getPositiveStatistics($period = 'week') {
 // 获取全部班级（含教师管理密码，供总管理 edit.php 使用）
 function getAllClasses() {
     $pdo = getDB();
-    $stmt = $pdo->query("SELECT c.id, c.class_number, c.password, c.teacher_password,
+    $stmt = $pdo->query("SELECT c.id, c.grade, c.class_number, c.password, c.teacher_password,
                          (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id) AS student_count,
                          (SELECT COUNT(*) FROM reading_records r WHERE r.class_id = c.id AND r.is_canceled = FALSE) AS record_count,
                          (SELECT COUNT(*) FROM penalty_records p WHERE p.class_id = c.id) AS penalty_count
-                         FROM classes c ORDER BY c.class_number ASC");
+                         FROM classes c ORDER BY c.grade ASC, c.class_number ASC");
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 

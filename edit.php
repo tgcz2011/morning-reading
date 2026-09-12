@@ -185,9 +185,12 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($classes as $c): ?>
+                        <?php $cur_grade = null; foreach ($classes as $c): ?>
+                        <?php if ($cur_grade !== (int)$c['grade']): $cur_grade = (int)$c['grade']; ?>
+                        <tr class="grade-group-row"><td colspan="8"><?php echo gradeName($cur_grade); ?></td></tr>
+                        <?php endif; ?>
                         <tr>
-                            <td><?php echo getClassName($c['class_number']); ?></td>
+                            <td><?php echo chineseNumber($c['class_number']); ?>班</td>
                             <td><?php echo $c['student_count']; ?></td>
                             <td><?php echo $c['record_count']; ?></td>
                             <td><?php echo $c['penalty_count']; ?></td>
@@ -217,12 +220,24 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
             <?php elseif ($tab === 'students'): ?>
                 <!-- ========== 任意班级学生名单 ========== -->
                 <h2 class="stats-title">学生名单管理</h2>
-                <div class="period-selector">
-                    <?php foreach ($classes as $c): ?>
-                        <a href="edit.php?tab=students&class=<?php echo $c['id']; ?>"
-                           class="period-btn <?php echo $sel_class == $c['id'] ? 'active' : ''; ?>"><?php echo getClassName($c['class_number']); ?></a>
-                    <?php endforeach; ?>
+                <?php
+                // 按年级分组班级
+                $classes_by_grade = [];
+                foreach ($classes as $c) {
+                    $classes_by_grade[(int)$c['grade']][] = $c;
+                }
+                ?>
+                <?php foreach ($classes_by_grade as $g => $gclasses): ?>
+                <div class="grade-selector-group">
+                    <span class="grade-selector-label"><?php echo gradeName($g); ?></span>
+                    <div class="period-selector">
+                        <?php foreach ($gclasses as $c): ?>
+                            <a href="edit.php?tab=students&class=<?php echo $c['id']; ?>"
+                               class="period-btn <?php echo $sel_class == $c['id'] ? 'active' : ''; ?>"><?php echo chineseNumber($c['class_number']); ?>班</a>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
+                <?php endforeach; ?>
 
                 <?php
                 $sel_students = getStudents($sel_class);
@@ -367,15 +382,18 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($classes as $c): ?>
+                        <?php $cur_grade = null; foreach ($classes as $c): ?>
+                        <?php if ($cur_grade !== (int)$c['grade']): $cur_grade = (int)$c['grade']; ?>
+                        <tr class="grade-group-row"><td colspan="5"><?php echo gradeName($cur_grade); ?></td></tr>
+                        <?php endif; ?>
                         <tr>
-                            <td><?php echo getClassName($c['class_number']); ?></td>
+                            <td><?php echo chineseNumber($c['class_number']); ?>班</td>
                             <td><?php echo $c['student_count']; ?></td>
                             <td><?php echo $c['record_count']; ?></td>
                             <td><?php echo $c['penalty_count']; ?></td>
                             <td>
                                 <form method="POST" class="admin-inline-form"
-                                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo getClassName($c['class_number']); ?>」的全部记录数据吗？此操作不可恢复。');">
+                                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo gradeName($c['grade']) . chineseNumber($c['class_number']); ?>班」的全部记录数据吗？此操作不可恢复。');">
                                     <input type="hidden" name="action" value="clear_data">
                                     <input type="hidden" name="class_id" value="<?php echo $c['id']; ?>">
                                     <button type="submit" class="admin-btn small danger">清空该班全部数据</button>

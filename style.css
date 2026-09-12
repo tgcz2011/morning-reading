@@ -782,6 +782,45 @@ body {
     color: #F4EEDF;
 }
 
+/* 年级分组（总管理：学生名单按年级排列） */
+.grade-selector-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.grade-selector-label {
+    flex: 0 0 44px;
+    padding-top: 7px;
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: .9rem;
+    letter-spacing: .08em;
+    color: var(--vermilion-deep);
+    text-align: right;
+}
+
+.grade-selector-group .period-selector {
+    flex: 1;
+    justify-content: flex-start;
+    margin-bottom: 10px;
+}
+
+/* 表格内年级分组标题行 */
+.grade-group-row td {
+    background: var(--paper) !important;
+    text-align: left !important;
+    padding: 8px 14px !important;
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: .92rem;
+    letter-spacing: .14em;
+    color: var(--vermilion-deep);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
 .stats-title {
     font-family: var(--serif);
     font-size: 1.25rem;

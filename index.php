@@ -11,12 +11,13 @@ if (isset($_GET['logout'])) {
 // 处理登录
 if (isset($_POST['login'])) {
     initDatabase();
+    $grade = isset($_POST['grade']) ? (int)$_POST['grade'] : 9;
     $class_number = isset($_POST['class_number']) ? (int)$_POST['class_number'] : 0;
-    if (login($class_number, $_POST['password'])) {
+    if (login($grade, $class_number, $_POST['password'])) {
         header('Location: index.php');
         exit;
     } else {
-        $error = "班级或密码错误";
+        $error = "年级、班级或密码错误";
     }
 }
 
@@ -53,16 +54,22 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($
                 </div>
             </div>
             <div class="login-form">
-                <h2>输入班级号并登录</h2>
+                <h2>选择年级、输入班级号并登录</h2>
                 <?php if (isset($error)): ?>
                     <div class="message error"><?php echo $error; ?></div>
                 <?php endif; ?>
+                <?php $sel_grade = isset($grade) ? $grade : 9; ?>
                 <form method="POST">
+                    <select name="grade" class="login-input" required>
+                        <?php foreach (gradeList() as $g => $gname): ?>
+                            <option value="<?php echo $g; ?>" <?php echo $g === $sel_grade ? 'selected' : ''; ?>><?php echo $gname; ?></option>
+                        <?php endforeach; ?>
+                    </select>
                     <input type="number" name="class_number" class="login-input" placeholder="班级号，如 01" min="1" max="<?php echo CLASS_COUNT; ?>" required>
                     <input type="password" name="password" placeholder="班级密码" required>
                     <button type="submit" name="login">登录</button>
                 </form>
-                <p class="login-hint">班级号用数字：一班 = 01，二班 = 02，以此类推<br>初始密码：admin + 班级号（一班 = admin01）<br>密码可在教师管理界面修改</p>
+                <p class="login-hint">先选年级，再填班级号：一班 = 01，二班 = 02，以此类推<br>初始密码：admin + 班级号（一班 = admin01）<br>密码可在教师管理界面修改</p>
             </div>
         </div>
     </body>

@@ -9,12 +9,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_template') {
 
 // ================= 教师登录（班级号 + 教师管理密码） =================
 if (isset($_POST['teacher_login'])) {
+    $grade = isset($_POST['grade']) ? (int)$_POST['grade'] : 9;
     $class_number = isset($_POST['class_number']) ? (int)$_POST['class_number'] : 0;
-    if (teacherLogin($class_number, $_POST['password'])) {
+    if (teacherLogin($grade, $class_number, $_POST['password'])) {
         header('Location: admin.php');
         exit;
     } else {
-        $error = "班级或教师管理密码错误";
+        $error = "年级、班级或教师管理密码错误";
     }
 }
 
@@ -44,16 +45,22 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
                 </div>
             </div>
             <div class="login-form">
-                <h2>输入班级号并输入教师管理密码</h2>
+                <h2>选择年级、输入班级号和教师管理密码</h2>
                 <?php if (isset($error)): ?>
                     <div class="message error"><?php echo $error; ?></div>
                 <?php endif; ?>
+                <?php $sel_grade = isset($grade) ? $grade : 9; ?>
                 <form method="POST">
+                    <select name="grade" class="login-input" required>
+                        <?php foreach (gradeList() as $g => $gname): ?>
+                            <option value="<?php echo $g; ?>" <?php echo $g === $sel_grade ? 'selected' : ''; ?>><?php echo $gname; ?></option>
+                        <?php endforeach; ?>
+                    </select>
                     <input type="number" name="class_number" class="login-input" placeholder="班级号，如 01" min="1" max="<?php echo CLASS_COUNT; ?>" required>
                     <input type="password" name="password" placeholder="教师管理密码" required>
                     <button type="submit" name="teacher_login">进入管理</button>
                 </form>
-                <p class="login-hint">班级号用数字：一班 = 01，二班 = 02，以此类推<br>教师管理密码与班级登录密码分开，初始相同（admin + 班级号）<br>忘记密码可联系总管理重置</p>
+                <p class="login-hint">先选年级，再填班级号：一班 = 01，二班 = 02，以此类推<br>教师管理密码与班级登录密码分开，初始相同（admin + 班级号）<br>忘记密码可联系总管理重置</p>
             </div>
         </div>
     </body>
@@ -111,7 +118,7 @@ if (isset($_POST['action'])) {
         unset($_SESSION['import_preview'][$teacher_class_id]);
         $r = ['success' => true, 'message' => '已取消导入'];
     } elseif ($action === 'teacher_logout') {
-        unset($_SESSION['teacher_logged_in'], $_SESSION['teacher_class_id'], $_SESSION['teacher_class_number']);
+        unset($_SESSION['teacher_logged_in'], $_SESSION['teacher_class_id'], $_SESSION['teacher_class_number'], $_SESSION['teacher_grade']);
         header('Location: admin.php');
         exit;
     } else {
@@ -147,7 +154,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教师管理 - <?php echo getClassName($teacher_class_number); ?></title>
+    <title>教师管理 - <?php echo getClassName($teacher_class_number, getTeacherGrade()); ?></title>
     <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
@@ -155,7 +162,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
         <div class="header">
             <div class="header-title">
                 <h1>教师管理</h1>
-                <span class="session-seal"><?php echo getClassName($teacher_class_number); ?></span>
+                <span class="session-seal"><?php echo getClassName($teacher_class_number, getTeacherGrade()); ?></span>
             </div>
             <div class="time-info"><?php echo date('Y年m月d日 H:i'); ?></div>
         </div>
@@ -181,7 +188,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                 <!-- ========== 学生名单管理（本班） ========== -->
                 <h2 class="stats-title">学生名单管理</h2>
                 <div class="stats-note">
-                    <strong><?php echo getClassName($teacher_class_number); ?>：</strong>
+                    <strong><?php echo getClassName($teacher_class_number, getTeacherGrade()); ?>：</strong>
                     <span>共 <?php echo count($students); ?> 名学生（姓名自动转码存储，不受数据库中文编码限制）</span>
                 </div>
 
@@ -311,7 +318,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                     <span>删除本班全部朗读记录、扣分与统计（保留班级和名单），操作不可恢复。</span>
                 </div>
                 <form method="POST" class="admin-inline-form"
-                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo getClassName($teacher_class_number); ?>」的全部记录数据吗？此操作不可恢复。');">
+                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo getClassName($teacher_class_number, getTeacherGrade()); ?>」的全部记录数据吗？此操作不可恢复。');">
                     <input type="hidden" name="action" value="clear_data">
                     <button type="submit" class="admin-btn small danger">清空本班全部数据</button>
                 </form>

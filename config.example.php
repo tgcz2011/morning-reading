@@ -18,9 +18,20 @@ define('DB_PORT', 3306);
 // 总管理密码（登录 edit.php 使用；edit.php 无任何入口链接，纯背网址访问）
 define('SUPERADMIN_PASSWORD', '请填写总管理密码');
 
-// 班级数量：自动创建 1~CLASS_COUNT 个班
+// 班级数量：每个年级自动创建 1~CLASS_COUNT 个班
 // 初始密码 = admin + 两位班级号（一班=admin01，二班=admin02，以此类推）
 define('CLASS_COUNT', 14);
+
+// 年级列表：7=初一 8=初二 9=初三（原有年级）10=高一 11=高二 12=高三
+function gradeList() {
+    return [7 => '初一', 8 => '初二', 9 => '初三', 10 => '高一', 11 => '高二', 12 => '高三'];
+}
+
+// 年级数字转中文名（9 -> 初三）
+function gradeName($grade) {
+    $list = gradeList();
+    return isset($list[(int)$grade]) ? $list[(int)$grade] : '';
+}
 
 // 学期开始日期：学期统计按此日期分割
 // 统计时取「当前日期之前最近的一个日期」作为本学期起点
@@ -70,21 +81,41 @@ function getSemesterStart($date = null) {
 function initDatabase() {
     $pdo = getDB();
 
-    // 班级表（password=班级密码，teacher_password=教师管理密码，两者分开但初始相同）
+    // 班级表（grade=年级 7初一/8初二/9初三/10高一/11高二/12高三；password=班级密码，teacher_password=教师管理密码）
+    // 班号在同一年级内唯一：UNIQUE(grade, class_number)
     $pdo->exec("CREATE TABLE IF NOT EXISTS classes (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        class_number INT NOT NULL UNIQUE,
+        grade TINYINT NOT NULL DEFAULT 9,
+        class_number INT NOT NULL,
         password VARCHAR(64) NOT NULL,
         teacher_password VARCHAR(64) NOT NULL DEFAULT '',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_grade_class (grade, class_number)
     ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // 迁移：老库 classes 表没有 teacher_password 列时补列，初始值 = 班级密码
+    // 迁移①：老库 classes 表没有 teacher_password 列时补列，初始值 = 班级密码
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM classes")->fetchAll(PDO::FETCH_COLUMN);
         if (!in_array('teacher_password', $cols)) {
             $pdo->exec("ALTER TABLE classes ADD COLUMN teacher_password VARCHAR(64) NOT NULL DEFAULT ''");
             $pdo->exec("UPDATE classes SET teacher_password = password");
+        }
+        // 迁移②：老库没有 grade 列时补列，原有班级全部归属初三（9）
+        if (!in_array('grade', $cols)) {
+            $pdo->exec("ALTER TABLE classes ADD COLUMN grade TINYINT NOT NULL DEFAULT 9 AFTER id");
+        }
+        // 迁移③：老库班号单列唯一 → 改为(年级,班号)联合唯一
+        $idx = $pdo->query("SHOW INDEX FROM classes")->fetchAll(PDO::FETCH_ASSOC);
+        $has_uk = false;
+        $has_single = false;
+        foreach ($idx as $ix) {
+            if ($ix['Key_name'] === 'uk_grade_class') $has_uk = true;
+            if ($ix['Key_name'] === 'class_number' && (int)$ix['Non_unique'] === 0) $has_single = true;
+        }
+        if (!$has_uk && $has_single) {
+            $pdo->exec("ALTER TABLE classes DROP INDEX class_number, ADD UNIQUE KEY uk_grade_class (grade, class_number)");
+        } elseif (!$has_uk) {
+            $pdo->exec("ALTER TABLE classes ADD UNIQUE KEY uk_grade_class (grade, class_number)");
         }
     } catch (PDOException $e) {
         // 表不存在时忽略（上面已建表）
@@ -155,11 +186,13 @@ function initDatabase() {
         $stmt->execute([$k, $v]);
     }
 
-    // 种子：创建 1~CLASS_COUNT 个班，班级密码与教师管理密码初始相同 = admin + 两位班级号
-    for ($n = 1; $n <= CLASS_COUNT; $n++) {
-        $initial_pwd = 'admin' . str_pad($n, 2, '0', STR_PAD_LEFT);
-        $stmt = $pdo->prepare("INSERT IGNORE INTO classes (class_number, password, teacher_password) VALUES (?, ?, ?)");
-        $stmt->execute([$n, $initial_pwd, $initial_pwd]);
+    // 种子：每个年级创建 CLASS_COUNT 个班，班级密码与教师管理密码初始相同 = admin + 两位班级号（一班=admin01）
+    $stmt = $pdo->prepare("INSERT IGNORE INTO classes (grade, class_number, password, teacher_password) VALUES (?, ?, ?, ?)");
+    foreach (array_keys(gradeList()) as $grade) {
+        for ($n = 1; $n <= CLASS_COUNT; $n++) {
+            $initial_pwd = 'admin' . str_pad($n, 2, '0', STR_PAD_LEFT);
+            $stmt->execute([$grade, $n, $initial_pwd, $initial_pwd]);
+        }
     }
 }
 ?>
