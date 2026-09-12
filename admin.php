@@ -79,7 +79,7 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
         <footer class="site-footer">
             <div class="footer-title">班级朗读记录系统 v<?php echo APP_VERSION; ?></div>
             <div>
-                作者：<?php echo APP_AUTHOR; ?>
+                作者：<a href="http://zztool.free.nf" target="_blank" rel="noopener" class="author-link"><?php echo APP_AUTHOR; ?></a><span class="author-hint">（点我看作者主页）</span>
                 <span class="footer-sep">·</span>
                 技术支持：豆包（Doubao）
                 <span class="footer-sep">·</span>
@@ -424,7 +424,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
     <footer class="site-footer">
         <div class="footer-title">班级朗读记录系统 v<?php echo APP_VERSION; ?></div>
         <div>
-            作者：<?php echo APP_AUTHOR; ?>
+            作者：<a href="http://zztool.free.nf" target="_blank" rel="noopener" class="author-link"><?php echo APP_AUTHOR; ?></a><span class="author-hint">（点我看作者主页）</span>
             <span class="footer-sep">·</span>
             技术支持：豆包（Doubao）
             <span class="footer-sep">·</span>

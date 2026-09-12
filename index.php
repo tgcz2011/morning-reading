@@ -99,7 +99,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($
         <footer class="site-footer">
             <div class="footer-title">班级朗读记录系统 v<?php echo APP_VERSION; ?></div>
             <div>
-                作者：<?php echo APP_AUTHOR; ?>
+                作者：<a href="http://zztool.free.nf" target="_blank" rel="noopener" class="author-link"><?php echo APP_AUTHOR; ?></a><span class="author-hint">（点我看作者主页）</span>
                 <span class="footer-sep">·</span>
                 技术支持：豆包（Doubao）
                 <span class="footer-sep">·</span>
@@ -522,7 +522,7 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
     <footer class="site-footer">
         <div class="footer-title">班级朗读记录系统 v<?php echo APP_VERSION; ?></div>
         <div>
-            作者：<?php echo APP_AUTHOR; ?>
+            作者：<a href="http://zztool.free.nf" target="_blank" rel="noopener" class="author-link"><?php echo APP_AUTHOR; ?></a><span class="author-hint">（点我看作者主页）</span>
             <span class="footer-sep">·</span>
             技术支持：豆包（Doubao）
             <span class="footer-sep">·</span>

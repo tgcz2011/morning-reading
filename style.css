@@ -1200,6 +1200,22 @@ body {
     border-bottom-style: solid;
 }
 
+.site-footer .author-link {
+    color: #2563eb;
+    text-decoration: underline;
+    border-bottom: none;
+    font-weight: 500;
+}
+
+.site-footer .author-link:hover {
+    color: #1d4ed8;
+}
+
+.site-footer .author-hint {
+    color: var(--ink-faint, #8a8272);
+    font-size: .75rem;
+}
+
 .site-footer .footer-sep {
     margin: 0 6px;
     color: var(--ink-faint, #c8c0b0);
