@@ -132,6 +132,7 @@ if (isset($_SESSION['message'])) {
 }
 
 $students = getStudents();
+$all_status = getAllStudentsStatus(); // 批量查询，2-3次查询替代逐学生 3×N 次
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -186,7 +187,7 @@ $students = getStudents();
                 $id = $s['id'];
                 $no = $s['student_no'];
                 $name = $s['name'];
-                $status = getStudentStatus($id);
+                $status = isset($all_status[$id]) ? $all_status[$id] : getStudentStatus($id);
                 $card_class = 'student-card';
 
                 // 只要有负分或者当前时间段有扣分，卡片呈"差"红色印章状态

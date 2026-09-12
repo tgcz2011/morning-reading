@@ -22,6 +22,9 @@ define('SUPERADMIN_PASSWORD', '请填写总管理密码');
 // 初始密码 = admin + 两位班级号（一班=admin01，二班=admin02，以此类推）
 define('CLASS_COUNT', 14);
 
+// 数据库结构版本：每次表结构/种子变更时递增，initDatabase 据此跳过已完成的初始化
+define('DB_VERSION', 4);
+
 // 年级列表：7=初一 8=初二 9=初三（原有年级）10=高一 11=高二 12=高三
 function gradeList() {
     return [7 => '初一', 8 => '初二', 9 => '初三', 10 => '高一', 11 => '高二', 12 => '高三'];
@@ -88,6 +91,14 @@ function getSemesterStart($date = null) {
 // 初始化数据库表与种子数据（首次访问自动执行）
 function initDatabase() {
     $pdo = getDB();
+
+    // 版本检查：结构与种子已是最新版本时直接跳过，避免每次请求跑 75 次 INSERT IGNORE
+    try {
+        $v = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'db_version'")->fetchColumn();
+        if ($v !== false && (int)$v === DB_VERSION) return;
+    } catch (PDOException $e) {
+        // settings 表不存在时继续初始化
+    }
 
     // 班级表（grade=年级 7初一/8初二/9初三/10高一/11高二/12高三；password=班级密码，teacher_password=教师管理密码）
     // 班号在同一年级内唯一：UNIQUE(grade, class_number)
@@ -219,5 +230,12 @@ function initDatabase() {
     } catch (PDOException $e) {
         // 表结构未就绪时忽略
     }
+
+    // 写入当前版本号，后续请求直接跳过初始化
+    try {
+        $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES ('db_version', ?)
+                       ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")
+            ->execute([DB_VERSION]);
+    } catch (PDOException $e) {}
 }
 ?>

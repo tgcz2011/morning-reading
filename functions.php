@@ -532,6 +532,62 @@ function getStudentStatus($student_id) {
     ];
 }
 
+// 批量获取全班学生状态（记录页渲染用，2次查询替代逐学生 3×N 次查询）
+// 返回 student_id => status 映射，status 结构与 getStudentStatus 一致
+function getAllStudentsStatus($class_id = null) {
+    $pdo = getDB();
+    $class_id = $class_id !== null ? (int)$class_id : getClassId();
+    $current_week = getWeekNumber();
+    $today = date('Y-m-d');
+    $current_type = getCurrentRecordType(); // 已静态缓存，不查库
+
+    // 一次查今日所有记录（含已取消的抵消记录，用于 session_added 判断）
+    $stmt = $pdo->prepare("SELECT student_id, record_type, is_canceled FROM reading_records
+                           WHERE class_id = ? AND record_date = ?");
+    $stmt->execute([$class_id, $today]);
+    $today_valid = [];   // is_canceled=FALSE 的记录（today_morning/evening）
+    $today_any = [];     // 所有记录含抵消（session_added）
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $sid = (int)$r['student_id'];
+        if (!isset($today_valid[$sid])) $today_valid[$sid] = ['m'=>false,'e'=>false];
+        if (!isset($today_any[$sid])) $today_any[$sid] = ['m'=>false,'e'=>false];
+        if ($r['record_type']==='morning') { $today_any[$sid]['m']=true; if(!$r['is_canceled']) $today_valid[$sid]['m']=true; }
+        if ($r['record_type']==='evening') { $today_any[$sid]['e']=true; if(!$r['is_canceled']) $today_valid[$sid]['e']=true; }
+    }
+
+    // 一次查本周所有统计
+    $stmt = $pdo->prepare("SELECT student_id, morning_count, evening_count, penalty_count FROM weekly_stats
+                           WHERE class_id = ? AND week_number = ?");
+    $stmt->execute([$class_id, $current_week]);
+    $weekly = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $weekly[(int)$r['student_id']] = $r;
+    }
+
+    // 获取全班学生 id（一次查询）
+    $stmt = $pdo->prepare("SELECT id FROM students WHERE class_id = ?");
+    $stmt->execute([$class_id]);
+    $result = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+        $sid = (int)$sid;
+        $tv = isset($today_valid[$sid]) ? $today_valid[$sid] : ['m'=>false,'e'=>false];
+        $ta = isset($today_any[$sid]) ? $today_any[$sid] : ['m'=>false,'e'=>false];
+        $w = isset($weekly[$sid]) ? $weekly[$sid] : ['morning_count'=>0,'evening_count'=>0,'penalty_count'=>0];
+        $mc=(int)$w['morning_count']; $ec=(int)$w['evening_count']; $pc=(int)$w['penalty_count'];
+        // session_added：当前时段今天有任何记录（含抵消记录）即算已加分
+        $session_added = ($current_type==='morning' && $ta['m']) || ($current_type==='evening' && $ta['e']);
+        $result[$sid] = [
+            'today_morning' => $tv['m'],
+            'today_evening' => $tv['e'],
+            'weekly_score' => $mc + $ec - $pc,
+            'penalty_count' => $pc,
+            'has_penalty_in_session' => $pc > 0,
+            'session_added' => $session_added,
+        ];
+    }
+    return $result;
+}
+
 // ============================================================
 // 统计（含负分的表格数据）
 // ============================================================
@@ -666,10 +722,14 @@ function getPositiveStatistics($period = 'week') {
 function getAllClasses() {
     $pdo = getDB();
     $stmt = $pdo->query("SELECT c.id, c.grade, c.class_number, c.password, c.teacher_password,
-                         (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id) AS student_count,
-                         (SELECT COUNT(*) FROM reading_records r WHERE r.class_id = c.id AND r.is_canceled = FALSE) AS record_count,
-                         (SELECT COUNT(*) FROM penalty_records p WHERE p.class_id = c.id) AS penalty_count
-                         FROM classes c ORDER BY c.grade ASC, c.class_number ASC");
+                         COALESCE(s.cnt, 0) AS student_count,
+                         COALESCE(r.cnt, 0) AS record_count,
+                         COALESCE(p.cnt, 0) AS penalty_count
+                         FROM classes c
+                         LEFT JOIN (SELECT class_id, COUNT(*) cnt FROM students GROUP BY class_id) s ON s.class_id = c.id
+                         LEFT JOIN (SELECT class_id, COUNT(*) cnt FROM reading_records WHERE is_canceled = FALSE GROUP BY class_id) r ON r.class_id = c.id
+                         LEFT JOIN (SELECT class_id, COUNT(*) cnt FROM penalty_records GROUP BY class_id) p ON p.class_id = c.id
+                         ORDER BY c.grade ASC, c.class_number ASC");
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
