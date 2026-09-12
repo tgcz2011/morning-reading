@@ -55,14 +55,17 @@ $semester_starts = [
 
 // 创建数据库连接
 function getDB() {
-    try {
-        $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
-        $pdo = new PDO($dsn, DB_USER, DB_PASS);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        return $pdo;
-    } catch(PDOException $e) {
-        die("数据库连接失败: " . $e->getMessage());
+    static $pdo = null;
+    if ($pdo === null) {
+        try {
+            $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+            $pdo = new PDO($dsn, DB_USER, DB_PASS);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        } catch(PDOException $e) {
+            die("数据库连接失败: " . $e->getMessage());
+        }
     }
+    return $pdo;
 }
 
 // 姓名转码：base64 编码存储（数据库不支持中文时的兼容方案）

@@ -40,9 +40,11 @@ $ranking_data = [];
 foreach ($stats_data as $data) {
     $student_id = $data['student_id'];
     $score = isset($data['score']) ? $data['score'] : $data['count'];
+    $info = isset($student_map[$student_id]) ? $student_map[$student_id] : null;
     $ranking_data[] = [
         'id' => $student_id,
-        'name' => isset($student_map[$student_id]) ? $student_map[$student_id] : ('#' . $student_id),
+        'student_no' => $info ? $info['student_no'] : '-',
+        'name' => $info ? $info['name'] : ('#' . $student_id),
         'score' => $score
     ];
 }
@@ -61,9 +63,10 @@ $positive_ranking_data = [];
 foreach ($positive_stats_data as $data) {
     $student_id = $data['student_id'];
     $score = isset($data['score']) ? $data['score'] : $data['count'];
+    $info = isset($student_map[$student_id]) ? $student_map[$student_id] : null;
     $positive_ranking_data[] = [
         'id' => $student_id,
-        'name' => isset($student_map[$student_id]) ? $student_map[$student_id] : ('#' . $student_id),
+        'name' => $info ? $info['name'] : ('#' . $student_id),
         'score' => $score
     ];
     $total_positive_score += $score;
@@ -186,7 +189,7 @@ if ($other_count > 0) {
                         echo "
                         <tr>
                             <td>{$rank_badge}</td>
-                            <td>{$student['id']}</td>
+                            <td>{$student['student_no']}</td>
                             <td>{$student['name']}</td>
                             <td>{$score_display}</td>
                             <td>

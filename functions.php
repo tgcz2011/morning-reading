@@ -170,11 +170,11 @@ function getStudents($class_id = null) {
     return $list;
 }
 
-// 学生 id => 姓名 映射
+// 学生 id => ['name' => 姓名, 'student_no' => 学号] 映射
 function getStudentMap($class_id = null) {
     $map = [];
     foreach (getStudents($class_id) as $s) {
-        $map[$s['id']] = $s['name'];
+        $map[$s['id']] = ['name' => $s['name'], 'student_no' => $s['student_no']];
     }
     return $map;
 }
@@ -329,7 +329,7 @@ function hasPenaltyThisWeek($student_id) {
     return $result['count'] > 0;
 }
 
-// 添加记录（加分）——所有状态存数据库，不依赖 session
+// 添加记录（加分）——所有状态存数据库，不依赖 session；事务保证抵消操作原子性
 function addRecord($student_id, $type = null) {
     if (!canRecord()) {
         return ['success' => false, 'message' => '当前不在可记录时间段内'];
@@ -341,54 +341,67 @@ function addRecord($student_id, $type = null) {
     $today = date('Y-m-d');
     $current_week = getWeekNumber();
 
-    // 一次朗读时间最多加一分：今天同时段有任何记录（含抵消负分的操作）即锁定
-    $stmt = $pdo->prepare("SELECT id FROM reading_records 
-                          WHERE class_id = ? AND student_id = ? AND record_date = ? AND record_type = ?");
-    $stmt->execute([$class_id, $student_id, $today, $type]);
-    if ($stmt->fetch()) {
-        return ['success' => false, 'message' => '本次朗读已加过分，最多加一分', 'already_added' => true];
-    }
-
-    // 检查本周是否有扣分（正分优先抵消负分，不区分时段）
-    $has_penalty = hasPenaltyThisWeek($student_id);
-
-    if ($has_penalty) {
-        // 抵消一条负分：删除本周任意一条扣分记录
-        $stmt = $pdo->prepare("DELETE FROM penalty_records 
-                              WHERE class_id = ? AND student_id = ? AND week_number = ? 
-                              ORDER BY id ASC LIMIT 1");
-        $stmt->execute([$class_id, $student_id, $current_week]);
-
-        // 更新周统计中的扣分计数
-        $stmt = $pdo->prepare("SELECT penalty_count FROM weekly_stats 
-                              WHERE class_id = ? AND student_id = ? AND week_number = ?");
-        $stmt->execute([$class_id, $student_id, $current_week]);
-        $weekly_data = $stmt->fetch();
-        if ($weekly_data && $weekly_data['penalty_count'] > 0) {
-            $stmt = $pdo->prepare("UPDATE weekly_stats SET penalty_count = penalty_count - 1 
-                                  WHERE class_id = ? AND student_id = ? AND week_number = ?");
-            $stmt->execute([$class_id, $student_id, $current_week]);
+    $pdo->beginTransaction();
+    try {
+        // 一次朗读时间最多加一分：今天同时段有任何记录（含抵消负分的操作）即锁定
+        $stmt = $pdo->prepare("SELECT id FROM reading_records
+                              WHERE class_id = ? AND student_id = ? AND record_date = ? AND record_type = ?");
+        $stmt->execute([$class_id, $student_id, $today, $type]);
+        if ($stmt->fetch()) {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => '本次朗读已加过分，最多加一分', 'already_added' => true];
         }
 
-        // 写一条抵消记录（is_canceled=TRUE，不计入统计，但用于"已加分"锁定和防重复）
-        $stmt = $pdo->prepare("INSERT INTO reading_records 
-                              (class_id, student_id, record_type, record_date, week_number, month_number, semester_week, is_canceled) 
-                              VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)");
+        // 检查本周是否有扣分（正分优先抵消负分，不区分时段）
+        $has_penalty = hasPenaltyThisWeek($student_id);
+
+        if ($has_penalty) {
+            // 抵消一条负分：删除本周任意一条扣分记录
+            $stmt = $pdo->prepare("DELETE FROM penalty_records
+                                  WHERE class_id = ? AND student_id = ? AND week_number = ?
+                                  ORDER BY id ASC LIMIT 1");
+            $stmt->execute([$class_id, $student_id, $current_week]);
+
+            // 更新周统计中的扣分计数
+            $stmt = $pdo->prepare("SELECT penalty_count FROM weekly_stats
+                                  WHERE class_id = ? AND student_id = ? AND week_number = ?");
+            $stmt->execute([$class_id, $student_id, $current_week]);
+            $weekly_data = $stmt->fetch();
+            if ($weekly_data && $weekly_data['penalty_count'] > 0) {
+                $stmt = $pdo->prepare("UPDATE weekly_stats SET penalty_count = penalty_count - 1
+                                      WHERE class_id = ? AND student_id = ? AND week_number = ?");
+                $stmt->execute([$class_id, $student_id, $current_week]);
+            }
+
+            // 写一条抵消记录（is_canceled=TRUE，不计入统计，但用于"已加分"锁定和防重复）
+            $stmt = $pdo->prepare("INSERT INTO reading_records
+                                  (class_id, student_id, record_type, record_date, week_number, month_number, semester_week, is_canceled)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)");
+            $stmt->execute([$class_id, $student_id, $type, $today, $current_week, getMonthNumber(), getSemesterWeek()]);
+
+            $pdo->commit();
+            return ['success' => true, 'message' => '已补回一分'];
+        }
+
+        // 无负分：插入正常加分记录
+        $stmt = $pdo->prepare("INSERT INTO reading_records
+                              (class_id, student_id, record_type, record_date, week_number, month_number, semester_week)
+                              VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([$class_id, $student_id, $type, $today, $current_week, getMonthNumber(), getSemesterWeek()]);
 
-        return ['success' => true, 'message' => '已补回一分'];
+        // 更新周统计（共享同一数据库连接，加入当前事务）
+        updateWeeklyStats($student_id, $current_week, $type, 1);
+
+        $pdo->commit();
+        return ['success' => true, 'message' => '记录成功'];
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        // 唯一索引冲突：竞态下另一请求已插入，返回友好提示
+        if ($e->getCode() === '23000') {
+            return ['success' => false, 'message' => '本次朗读已加过分，最多加一分', 'already_added' => true];
+        }
+        throw $e;
     }
-
-    // 无负分：插入正常加分记录
-    $stmt = $pdo->prepare("INSERT INTO reading_records 
-                          (class_id, student_id, record_type, record_date, week_number, month_number, semester_week) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$class_id, $student_id, $type, $today, $current_week, getMonthNumber(), getSemesterWeek()]);
-
-    // 更新周统计
-    updateWeeklyStats($student_id, $current_week, $type, 1);
-
-    return ['success' => true, 'message' => '记录成功'];
 }
 
 // 取消记录
@@ -540,15 +553,12 @@ function getStudentStatus($student_id) {
     $total_records = $morning_count + $evening_count;
     $net_score = $total_records - $penalty_count;
 
-    // 检查当前时间段是否有扣分
-    $has_penalty_in_session = hasPenaltyThisWeek($student_id);
-
     return [
         'today_morning' => $today_morning,
         'today_evening' => $today_evening,
         'weekly_score' => $net_score,
         'penalty_count' => $penalty_count,
-        'has_penalty_in_session' => $has_penalty_in_session,
+        'has_penalty_in_session' => $penalty_count > 0,
         'session_added' => hasAddedThisSession($student_id)
     ];
 }
