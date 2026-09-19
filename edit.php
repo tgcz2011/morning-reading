@@ -88,6 +88,8 @@ if (isset($_POST['action'])) {
         $r = deleteStudent((int)$_POST['student_id']);
     } elseif ($action === 'clear_data' && isset($_POST['class_id'])) {
         $r = clearClassData((int)$_POST['class_id']);
+    } elseif ($action === 'clear_all_data' && isset($_POST['class_id'])) {
+        $r = clearClassAllData((int)$_POST['class_id']);
     } elseif ($action === 'update_period_settings' && isset($_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end'])) {
         $r = updatePeriodSettings($_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end']);
         $redirect = 'edit.php?tab=settings';
@@ -384,7 +386,7 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                 <h2 class="stats-title">数据管理</h2>
                 <div class="stats-note">
                     <strong>清空数据：</strong>
-                    <span>删除该班全部朗读记录、扣分与统计（保留班级和名单），操作不可恢复。</span>
+                    <span>删除该班全部朗读记录、扣分与统计（保留班级和名单）；「含名单」按钮可连学生名单一起清空。操作不可恢复。</span>
                 </div>
                 <table class="ranking-table">
                     <thead>
@@ -412,6 +414,14 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                                     <input type="hidden" name="action" value="clear_data">
                                     <input type="hidden" name="class_id" value="<?php echo $c['id']; ?>">
                                     <button type="submit" class="admin-btn small danger">清空该班全部数据</button>
+                                </form>
+                                <form method="POST" class="admin-inline-form"
+                                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空全部数据（含名单）', '确定清空「<?php echo gradeName($c['grade']) . chineseNumber($c['class_number']); ?>班」的全部数据吗？
+
+此操作将删除所有学生名单和记录，不可恢复！');">
+                                    <input type="hidden" name="action" value="clear_all_data">
+                                    <input type="hidden" name="class_id" value="<?php echo $c['id']; ?>">
+                                    <button type="submit" class="admin-btn small danger" style="background:#8b0000;">含名单</button>
                                 </form>
                             </td>
                         </tr>

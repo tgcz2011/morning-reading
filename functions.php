@@ -889,6 +889,25 @@ function clearClassData($class_id) {
     return ['success' => true, 'message' => '该班记录数据已清空'];
 }
 
+// 清空班级全部数据（含学生名单，重置单会话）
+function clearClassAllData($class_id) {
+    $pdo = getDB();
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("DELETE FROM reading_records WHERE class_id = ?")->execute([(int)$class_id]);
+        $pdo->prepare("DELETE FROM weekly_stats WHERE class_id = ?")->execute([(int)$class_id]);
+        $pdo->prepare("DELETE FROM penalty_records WHERE class_id = ?")->execute([(int)$class_id]);
+        $pdo->prepare("DELETE FROM students WHERE class_id = ?")->execute([(int)$class_id]);
+        // 重置单会话 token，踢掉当前活跃记录会话
+        $pdo->prepare("UPDATE classes SET active_session_token = NULL WHERE id = ?")->execute([(int)$class_id]);
+        $pdo->commit();
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        return ['success' => false, 'message' => '清空失败：' . $e->getMessage()];
+    }
+    return ['success' => true, 'message' => '该班全部数据（含名单）已清空'];
+}
+
 // ============================================================
 // 批量导入（CSV：第一列学号，第二列姓名）
 // ============================================================

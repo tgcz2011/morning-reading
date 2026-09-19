@@ -118,6 +118,8 @@ if (isset($_POST['action'])) {
         $r = deleteStudent((int)$_POST['student_id']);
     } elseif ($action === 'clear_data') {
         $r = clearClassData($teacher_class_id);
+    } elseif ($action === 'clear_all_data') {
+        $r = clearClassAllData($teacher_class_id);
     } elseif ($action === 'preview_import') {
         // 第一步：上传 Excel → 解析 → 存入会话待确认
         $parsed = parseStudentFile(isset($_FILES['csv_file']) ? $_FILES['csv_file'] : null);
@@ -345,12 +347,19 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                 <h2 class="stats-title">数据管理</h2>
                 <div class="stats-note">
                     <strong>清空数据：</strong>
-                    <span>删除本班全部朗读记录、扣分与统计（保留班级和名单），操作不可恢复。</span>
+                    <span>删除本班全部朗读记录、扣分与统计（保留班级和名单）；下方红色按钮可连学生名单一起清空。操作不可恢复。</span>
                 </div>
                 <form method="POST" class="admin-inline-form"
                       onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空数据', '确定清空「<?php echo getClassName($teacher_class_number, getTeacherGrade()); ?>」的全部记录数据吗？此操作不可恢复。');">
                     <input type="hidden" name="action" value="clear_data">
                     <button type="submit" class="admin-btn small danger">清空本班全部数据</button>
+                </form>
+                <form method="POST" class="admin-inline-form"
+                      onsubmit="event.preventDefault(); confirmAndSubmit(this, '清空全部数据（含名单）', '确定清空「<?php echo getClassName($teacher_class_number, getTeacherGrade()); ?>」的全部数据吗？
+
+此操作将删除所有学生名单和记录，不可恢复！');">
+                    <input type="hidden" name="action" value="clear_all_data">
+                    <button type="submit" class="admin-btn small danger" style="background:#8b0000;">清空本班全部数据（含名单）</button>
                 </form>
             <?php endif; ?>
         </div>
