@@ -51,7 +51,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>班级朗读记录系统 - 登录</title>
-        <link rel="stylesheet" href="style.css?v=3">
+        <link rel="stylesheet" href="style.css?v=4">
     </head>
     <body>
         <div class="container">
@@ -168,7 +168,7 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo getClassName(); ?> · 班级朗读记录系统</title>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
     <div class="container">

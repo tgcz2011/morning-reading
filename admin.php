@@ -34,7 +34,7 @@ if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !==
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>教师管理 - 班级朗读记录系统</title>
-        <link rel="stylesheet" href="style.css?v=3">
+        <link rel="stylesheet" href="style.css?v=4">
     </head>
     <body>
         <div class="container">
@@ -187,7 +187,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>教师管理 - <?php echo getClassName($teacher_class_number, getTeacherGrade()); ?></title>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
     <div class="container">
@@ -205,6 +205,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
             <a href="admin.php?tab=students" class="nav-btn <?php echo $tab === 'students' ? 'active' : ''; ?>">学生名单</a>
             <a href="admin.php?tab=passwords" class="nav-btn <?php echo $tab === 'passwords' ? 'active' : ''; ?>">本班密码</a>
             <a href="admin.php?tab=data" class="nav-btn <?php echo $tab === 'data' ? 'active' : ''; ?>">数据管理</a>
+            <a href="admin.php?tab=api" class="nav-btn <?php echo $tab === 'api' ? 'active' : ''; ?>">API 接口</a>
             <form method="POST" style="margin:0;padding:0;display:inline;">
                 <input type="hidden" name="action" value="teacher_logout">
                 <button type="submit" class="nav-btn nav-logout">退出</button>
@@ -361,6 +362,132 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                     <input type="hidden" name="action" value="clear_all_data">
                     <button type="submit" class="admin-btn small danger" style="background:#8b0000;">清空本班全部数据（含名单）</button>
                 </form>
+            <?php elseif ($tab === 'api'): ?>
+                <!-- ========== API 接口文档（本班） ========== -->
+                <?php
+                $api_username = getTeacherGrade() . '-' . $teacher_class_number;
+                $api_stmt = getDB()->prepare("SELECT teacher_password FROM classes WHERE id = ?");
+                $api_stmt->execute([$teacher_class_id]);
+                $api_pass = (string)$api_stmt->fetchColumn();
+                $api_slot_key = date('YmdH');
+                $api_slot_seed = hash('sha256', API_SEED . ':' . $api_slot_key);
+                $api_token = hash('sha256', $api_username . ':' . $api_pass . ':' . $api_slot_seed);
+                $api_base = 'http://' . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'zztool.free.nf') . '/morning-reading/api.php';
+                ?>
+                <h2 class="stats-title">API 接口文档</h2>
+                <div class="stats-note">
+                    <strong>认证方式：</strong>
+                    <span>请求头 <code>Authorization: Bearer &lt;token&gt;</code>，token 由「用户名 + 教师管理密码 + 种子」生成，种子每小时变化一次（最长约 3 小时、最短约 1 小时有效）。泄露了也不用怕，很快自动失效。</span>
+                </div>
+
+                <div class="import-box">
+                    <div class="import-title">我的 API Token（当前时段）</div>
+                    <div class="import-sub">用户名：<code><?php echo $api_username; ?></code>（年级-班号） · 教师管理密码在生成公式中使用 · 种子时槽：<code><?php echo $api_slot_key; ?></code>（北京时间，每小时变化）</div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;">
+                        <code id="apiTokenBox" style="font-size:.9rem;background:#efe8d8;padding:8px 12px;border-radius:6px;word-break:break-all;flex:1;min-width:200px;"><?php echo $api_token; ?></code>
+                        <button type="button" class="admin-btn solid" id="apiTokenCopyBtn">复制 Token</button>
+                        <button type="button" class="admin-btn" id="apiTokenRefreshBtn">刷新显示</button>
+                    </div>
+                    <div class="import-sub">Token 生成公式（自己算也行）：<br>
+                        <code>slot_key = date('YmdH')</code>（当前小时）<br>
+                        <code>slot_seed = sha256(API_SEED . ':' . slot_key)</code><br>
+                        <code>token = sha256(用户名 . ':' . 教师管理密码 . ':' . slot_seed)</code><br>
+                        验证窗口为当前小时 ± 1 小时，跨整点请求会自动通过。
+                    </div>
+                </div>
+
+                <h3 class="stats-title" style="font-size:1.05rem;">端点一览</h3>
+                <table class="ranking-table" style="margin-bottom:18px;">
+                    <thead>
+                        <tr>
+                            <th width="16%">方法</th>
+                            <th width="34%">端点</th>
+                            <th width="50%">说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>GET</td><td><code>action=status</code></td><td>班级信息、当前时段、是否可记录、token 时槽</td></tr>
+                        <tr><td>GET</td><td><code>action=students</code></td><td>学生名单（学号/姓名/今日早读晚读/周得分/已加分）</td></tr>
+                        <tr><td>GET</td><td><code>action=stats&amp;period=week</code></td><td>统计排行；period 可选 day/week/month/semester/total</td></tr>
+                        <tr><td>POST</td><td><code>action=add_record&amp;student_no=1</code></td><td>加分（一次朗读最多加一分；自动抵消本周负分）</td></tr>
+                        <tr><td>POST</td><td><code>action=cancel_record&amp;student_no=1</code></td><td>取消本次朗读记录</td></tr>
+                        <tr><td>POST</td><td><code>action=penalize&amp;student_no=1</code></td><td>扣分（不限次数；优先抵消本周正分）</td></tr>
+                        <tr><td>POST</td><td><code>action=add_student&amp;student_no=1</code></td><td>添加学生；<code>name</code> 建议用 <code>-d</code> 表单传（中文）</td></tr>
+                        <tr><td>POST</td><td><code>action=update_student&amp;student_no=1&amp;name=李四</code></td><td>修改学生姓名；可加 <code>new_no=</code> 改学号</td></tr>
+                        <tr><td>POST</td><td><code>action=delete_student&amp;student_no=1</code></td><td>删除学生（同时删除其全部记录）</td></tr>
+                        <tr><td>POST</td><td><code>action=import_students</code></td><td>批量导入（JSON 或文本行，冲突自动覆盖）</td></tr>
+                        <tr><td>POST</td><td><code>action=clear_data</code></td><td>清空本班记录（保留名单）</td></tr>
+                        <tr><td>POST</td><td><code>action=clear_all_data</code></td><td>清空本班全部数据（含名单）</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 class="stats-title" style="font-size:1.05rem;">调用示例（curl）</h3>
+                <pre class="api-pre"># 1. 查看学生名单
+curl "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=students" \
+  -H "Authorization: Bearer <?php echo $api_token; ?>"
+
+# 2. 本周统计排行
+curl "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=stats&amp;period=week" \
+  -H "Authorization: Bearer <?php echo $api_token; ?>"
+
+# 3. 给学号 3 加分（自动判断早读/晚读时段）
+curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=add_record&amp;student_no=3" \
+  -H "Authorization: Bearer <?php echo $api_token; ?>"
+
+# 3b. 添加学生（中文参数建议用 -d 表单传，避免 URL 编码问题）
+curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=add_student" \
+  -H "Authorization: Bearer <?php echo $api_token; ?>" \
+  -d "student_no=6" \
+  -d "name=王小明"
+
+# 4. 批量导入（JSON 格式，学号已存在的自动覆盖姓名）
+curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=import_students" \
+  -H "Authorization: Bearer <?php echo $api_token; ?>" \
+  -H "Content-Type: application/json" \
+  -d '{"students":[{"no":1,"name":"张三"},{"no":2,"name":"李四"}]}'
+
+# 5. 文本行格式导入（每行：学号,姓名）
+curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=import_students" \
+  -H "Authorization: Bearer <?php echo $api_token; ?>" \
+  --data-binary $'1,张三
+2,李四'</pre>
+
+                <div class="stats-note">
+                    <strong>安全提示：</strong>
+                    <span>① Token 每小时变化，请在调用前到本页复制最新 Token；② API 权限与教师管理相同，只操作本班数据；③ 修改 config.php 中的 <code>API_SEED</code> 可使全校所有 Token 立即失效；④ 请勿把 Token 提交到公开仓库或分享给他人。</span>
+                </div>
+                <script>
+                    // 复制当前 Token
+                    document.getElementById('apiTokenCopyBtn').addEventListener('click', function () {
+                        var t = document.getElementById('apiTokenBox').textContent.trim();
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(t).then(function () {
+                                apiCopyTip();
+                            });
+                        } else {
+                            // 老浏览器降级：选中文本
+                            var range = document.createRange();
+                            range.selectNode(document.getElementById('apiTokenBox'));
+                            window.getSelection().removeAllRanges();
+                            window.getSelection().addRange(range);
+                        }
+                    });
+                    function apiCopyTip() {
+                        var tip = document.getElementById('apiCopyTip');
+                        if (!tip) {
+                            tip = document.createElement('div');
+                            tip.id = 'apiCopyTip';
+                            tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2F6B4F;color:#fff;padding:10px 18px;border-radius:8px;font-size:.9rem;z-index:99;box-shadow:0 4px 12px rgba(0,0,0,.25);';
+                            document.body.appendChild(tip);
+                        }
+                        tip.textContent = 'Token 已复制到剪贴板（当前时段有效，跨小时后自动变化）';
+                        clearTimeout(tip._t);
+                        tip._t = setTimeout(function () { tip.remove(); }, 2500);
+                    }
+                    document.getElementById('apiTokenRefreshBtn').addEventListener('click', function () {
+                        location.reload();
+                    });
+                </script>
             <?php endif; ?>
         </div>
     </div>

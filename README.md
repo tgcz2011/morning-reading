@@ -58,8 +58,9 @@
 ```
 ├── index.php          # 班级登录 + 记录页（加分/扣分，3小时过期）
 ├── stats.php          # 统计页（今日/本周/本月/学期/总统计，3小时过期）
-├── admin.php          # 教师管理页（本班名单/密码/清空，7天过期）
+├── admin.php          # 教师管理页（本班名单/密码/清空/API文档，7天过期）
 ├── edit.php           # 总管理页（superadmin，所有班级/时段设置，无入口链接）
+├── api.php            # HTTP API（Token 认证，全功能端点）
 ├── heartbeat.php      # 心跳接口（前端定时调用，检测登录是否过期/被踢）
 ├── config.php         # 生产配置（数据库凭据+总管理密码，不入库）
 ├── config.example.php # 配置模板（入库，部署时复制为 config.php）
@@ -116,6 +117,58 @@
 - 坏行（空姓名、非数字学号等）自动跳过并提示；兼容 .csv 文件
 - 模板下载无需登录，直接访问 `admin.php?action=download_template`
 - xlsx 解析使用 [SimpleXLSX](https://github.com/shuchkin/simplexlsx)（MIT License，单文件无依赖）
+
+## API 接口
+
+系统提供 HTTP API（`api.php`），可用脚本或程序调用记录页与教师管理页的全部操作。API 文档在**教师管理页 →「API 接口」**标签页可见（登录后自动展示当前班级的 Token）。
+
+### 认证
+
+请求头携带 Token（或 `?token=` 参数），Token 由「用户名 + 教师管理密码 + 种子」生成：
+
+```
+用户名   = 年级-班级号（如 9-6 = 初三6班）
+种子     = sha256(API_SEED . ':' . date('YmdH'))   # 按小时轮换
+Token    = sha256(用户名 . ':' . 教师管理密码 . ':' . 种子)
+```
+
+- `API_SEED` 在 `config.php` 中配置；验证窗口为当前小时 ± 1 小时（Token 最长约 3 小时、最短约 1 小时有效）
+- 修改 `API_SEED` 会使全校所有 Token 立即失效
+- 中文参数建议用 `-d` 表单方式传递（避免 URL 编码问题）
+
+```
+# 查看学生名单
+curl "https://zztool.free.nf/morning-reading/api.php?username=9-6&action=students" \
+  -H "Authorization: Bearer <token>"
+
+# 给学号 3 加分
+curl -X POST "https://zztool.free.nf/morning-reading/api.php?username=9-6&action=add_record&student_no=3" \
+  -H "Authorization: Bearer <token>"
+
+# 批量导入（冲突覆盖）
+curl -X POST "https://zztool.free.nf/morning-reading/api.php?username=9-6&action=import_students" \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"students":[{"no":1,"name":"张三"}]}'
+```
+
+### 端点
+
+| 方法 | action | 参数 | 说明 |
+|------|--------|------|------|
+| GET | `status` | — | 班级信息、当前时段、是否可记录、Token 时槽 |
+| GET | `students` | — | 学生名单（学号/姓名/今日早读晚读/周得分/已加分） |
+| GET | `stats` | `period=day/week/month/semester/total` | 统计排行 |
+| POST | `add_record` | `student_no`（可选 `type=morning/evening`） | 加分（一次最多加一分，自动抵消负分） |
+| POST | `cancel_record` | `student_no`（可选 `type`） | 取消本次记录 |
+| POST | `penalize` | `student_no` | 扣分（不限次数，优先抵消正分） |
+| POST | `add_student` | `student_no`, `name` | 添加学生 |
+| POST | `update_student` | `student_no`, `name`（可选 `new_no`） | 修改学生 |
+| POST | `delete_student` | `student_no` | 删除学生（含其全部记录） |
+| POST | `import_students` | JSON body 或文本行 | 批量导入（冲突覆盖） |
+| POST | `clear_data` | — | 清空记录（保留名单） |
+| POST | `clear_all_data` | — | 清空全部（含名单） |
+
+错误响应统一为 `{"success": false, "code": <HTTP>, "message": "..."}`，认证失败返回 HTTP 401。
 
 ## 安全注意事项
 

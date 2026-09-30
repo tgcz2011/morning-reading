@@ -928,7 +928,7 @@ function parseCsvText($content) {
     foreach ($lines as $line) {
         $line = trim($line);
         if ($line === '') continue;
-        $cells = str_getcsv($line);
+        $cells = str_getcsv($line, ',', '"', '\\'); // 显式 escape 参数，兼容 PHP 8.4 弃用默认值
         $rows[] = $cells;
     }
     return $rows;

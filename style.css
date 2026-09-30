@@ -1171,6 +1171,32 @@ body {
     }
 }
 
+/* ---------- API 文档页 ---------- */
+
+.api-pre {
+    background: #26241f;
+    color: #e8e2d2;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: .82rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 12px 0 18px;
+}
+
+.api-pre code {
+    background: transparent;
+}
+
+.stats-note code, .import-sub code, .ranking-table code {
+    background: #efe8d8;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: .88em;
+}
+
 /* ---------- 页脚（作者/版本/许可） ---------- */
 
 .site-footer {
