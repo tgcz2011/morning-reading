@@ -122,51 +122,51 @@
 
 系统提供 HTTP API（`api.php`），可用脚本或程序调用记录页与教师管理页的全部操作。API 文档在**教师管理页 →「API 接口」**标签页可见（登录后自动展示当前班级的 Token）。
 
-### 认证
-
-请求头携带 Token（或 `?token=` 参数），Token 由「用户名 + 教师管理密码 + 种子」生成：
+### 认证（三步）
 
 ```
-用户名   = 年级-班级号（如 9-6 = 初三6班）
-种子     = sha256(API_SEED . ':' . date('YmdH'))   # 按小时轮换
-Token    = sha256(用户名 . ':' . 教师管理密码 . ':' . 种子)
+① 获取种子：GET api.php?action=get_seed&identity=record|teacher|superadmin   （无需登录）
+② 计算 token：token = sha256(用户名 . ':' . 密码 . ':' . 种子)
+③ 请求：Authorization: Bearer <token>   或   ?token=<token>
 ```
 
-- `API_SEED` 在 `config.php` 中配置；验证窗口为当前小时 ± 1 小时（Token 最长约 3 小时、最短约 1 小时有效）
-- 修改 `API_SEED` 会使全校所有 Token 立即失效
-- 中文参数建议用 `-d` 表单方式传递（避免 URL 编码问题）
+- 种子由服务端生成（按小时轮换），**同一时刻三种身份的种子互不相同**；密码和种子永不通过网络传输，中间人最多拿到当小时有效的 token
+- 验证窗口为当前小时 ± 1 小时，客户端本地时间不准也能用（种子由服务器下发，天然校准）
+- 修改 `API_SEED`（config.php）会使全校所有 token 立即失效
+
+**三种身份**（权限从低到高）：
+
+| 身份 | 用户名 | 密码 | 可用操作 |
+|------|--------|------|----------|
+| record 班级记录 | 年级-班号（如 `9-6`） | 班级登录密码 | 查名单/统计、加分、取消、扣分 |
+| teacher 教师管理 | 年级-班号（如 `9-6`） | 教师管理密码 | 全部端点（本班） |
+| superadmin 总管理 | `superadmin` | 总管理密码 | 全部端点 + 任意班级（需 `grade_class=9-6`） |
 
 ```
-# 查看学生名单
-curl "https://zztool.free.nf/morning-reading/api.php?username=9-6&action=students" \
-  -H "Authorization: Bearer <token>"
+# 示例：教师身份取种子并计算 token（bash）
+SEED=$(curl -s ".../api.php?action=get_seed&identity=teacher" | python3 -c "import json,sys;print(json.load(sys.stdin)['data']['seed'])")
+TOKEN=$(printf '%s' "9-6:教师管理密码:$SEED" | sha256sum | cut -d' ' -f1)
 
-# 给学号 3 加分
-curl -X POST "https://zztool.free.nf/morning-reading/api.php?username=9-6&action=add_record&student_no=3" \
-  -H "Authorization: Bearer <token>"
-
-# 批量导入（冲突覆盖）
-curl -X POST "https://zztool.free.nf/morning-reading/api.php?username=9-6&action=import_students" \
-  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
-  -d '{"students":[{"no":1,"name":"张三"}]}'
+curl ".../api.php?username=9-6&action=students" -H "Authorization: Bearer $TOKEN"
 ```
 
 ### 端点
 
-| 方法 | action | 参数 | 说明 |
-|------|--------|------|------|
-| GET | `status` | — | 班级信息、当前时段、是否可记录、Token 时槽 |
-| GET | `students` | — | 学生名单（学号/姓名/今日早读晚读/周得分/已加分） |
-| GET | `stats` | `period=day/week/month/semester/total` | 统计排行 |
-| POST | `add_record` | `student_no`（可选 `type=morning/evening`） | 加分（一次最多加一分，自动抵消负分） |
-| POST | `cancel_record` | `student_no`（可选 `type`） | 取消本次记录 |
-| POST | `penalize` | `student_no` | 扣分（不限次数，优先抵消正分） |
-| POST | `add_student` | `student_no`, `name` | 添加学生 |
-| POST | `update_student` | `student_no`, `name`（可选 `new_no`） | 修改学生 |
-| POST | `delete_student` | `student_no` | 删除学生（含其全部记录） |
-| POST | `import_students` | JSON body 或文本行 | 批量导入（冲突覆盖） |
-| POST | `clear_data` | — | 清空记录（保留名单） |
-| POST | `clear_all_data` | — | 清空全部（含名单） |
+| 方法 | action | 参数 | 最低身份 | 说明 |
+|------|--------|------|----------|------|
+| GET | `get_seed` | `identity=record/teacher/superadmin` | 无需登录 | 获取当前小时种子 |
+| GET | `status` | — | record | 班级信息、当前时段、是否可记录、Token 时槽、身份 |
+| GET | `students` | — | record | 学生名单（学号/姓名/今日早读晚读/周得分/已加分） |
+| GET | `stats` | `period=day/week/month/semester/total` | record | 统计排行 |
+| POST | `add_record` | `student_no`（可选 `type=morning/evening`） | record | 加分（一次最多加一分，自动抵消负分） |
+| POST | `cancel_record` | `student_no`（可选 `type`） | record | 取消本次记录 |
+| POST | `penalize` | `student_no` | record | 扣分（不限次数，优先抵消正分） |
+| POST | `add_student` | `student_no`, `name` | teacher | 添加学生 |
+| POST | `update_student` | `student_no`, `name`（可选 `new_no`） | teacher | 修改学生 |
+| POST | `delete_student` | `student_no` | teacher | 删除学生（含其全部记录） |
+| POST | `import_students` | JSON body 或文本行 | teacher | 批量导入（冲突覆盖） |
+| POST | `clear_data` | — | teacher | 清空记录（保留名单） |
+| POST | `clear_all_data` | — | teacher | 清空全部（含名单） |
 
 错误响应统一为 `{"success": false, "code": <HTTP>, "message": "..."}`，认证失败返回 HTTP 401。
 

@@ -1,23 +1,39 @@
 <?php
 /**
  * ============================================================
- * 班级朗读记录系统 API v1
+ * 班级朗读记录系统 API v1.1
  *
- * 认证方式：Authorization: Bearer <token>（或 ?token= 参数）
- *   username = "年级-班级号"（如 9-6 = 初三6班，0-14 不存在）
- *   password = 教师管理密码（admin.php 登录用的那个）
+ * 认证流程（三步）：
+ *   1. 客户端先调 get_seed 获取种子（无需 token）：
+ *        GET api.php?action=get_seed&identity=record|teacher|superadmin
+ *      → 返回 { seed, slot, identity, server_time }
+ *   2. 客户端本地计算 token：
+ *        token = sha256(用户名 : 密码 : 种子)
+ *      三种身份的种子在同一请求条件下互不相同
+ *      （seed = sha256(API_SEED : 当前小时 : 身份)，身份不同 → 种子不同）。
+ *   3. 请求携带 token：
+ *        Authorization: Bearer <token>  或  ?token=<token>
  *
- * token 生成公式（种子按小时轮换）：
- *   slot_key  = date('YmdH')                       # 当前小时，如 2026093014
- *   slot_seed = sha256(API_SEED . ':' . slot_key)  # API_SEED 在 config.php
- *   token     = sha256(username . ':' . password . ':' . slot_seed)
+ * 用户名与密码（对应三种身份，权限从高到低）：
+ *   superadmin  用户名 = superadmin，密码 = SUPERADMIN_PASSWORD（config.php）
+ *   teacher     用户名 = 年级-班号（如 9-6），密码 = 教师管理密码
+ *   record      用户名 = 年级-班号（如 9-6），密码 = 班级登录密码
  *
- * 验证窗口：当前小时 ± 1 小时（防止请求正好跨过整点边界失败）。
- * 因此 token 最长有效约 3 小时、最短约 1 小时，每小时变化一次。
+ * 服务器按 superadmin → teacher → record 顺序尝试，命中即取该身份；
+ * 若某班级两套密码相同，用同一用户名+密码请求会得到更高身份权限。
  *
- * 使用示例：
- *   curl "https://zztool.free.nf/morning-reading/api.php?username=9-6&action=students" \
- *        -H "Authorization: Bearer <token>"
+ * 验证窗口：当前小时 ± 1 小时（3 个 slot 都尝试），
+ * token 最长有效约 3 小时、最短约 1 小时，每小时随种子轮换失效。
+ *
+ * 权限矩阵：
+ *   record      status / students / stats / add_record / cancel_record / penalize
+ *   teacher     全部端点（本班，与教师管理页一致）
+ *   superadmin  全部端点 + 需用 grade_class=年级-班号 指定班级（可操作任意班）
+ *
+ * 使用示例（bash）：
+ *   SEED=$(curl -s "...api.php?action=get_seed&identity=teacher" | 解析 seed)
+ *   TOKEN=$(printf '%s' "9-6:admin06:$SEED" | sha256sum | cut -d' ' -f1)
+ *   curl -H "Authorization: Bearer $TOKEN" "...api.php?username=9-6&action=students"
  *
  * 全部端点见教师管理页（admin.php?tab=api）的 API 文档。
  * ============================================================
@@ -27,15 +43,44 @@ require_once 'functions.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-// ---------- 认证 ----------
+// ---------- 种子 / Token ----------
 
-// 计算某小时槽位的 token
-function apiTokenFor($username, $password, $slot_key) {
-    $slot_seed = hash('sha256', API_SEED . ':' . $slot_key);
-    return hash('sha256', $username . ':' . $password . ':' . $slot_seed);
+// 某身份在某个小时槽位的种子（三种身份在同一请求条件下互不相同）
+function apiSeed($identity, $slot_key) {
+    return hash('sha256', API_SEED . ':' . $slot_key . ':' . $identity);
 }
 
-// 认证并返回班级记录；失败返回 null
+function apiTokenFor($username, $password, $seed) {
+    return hash('sha256', $username . ':' . $password . ':' . $seed);
+}
+
+// 按身份解析用户名对应的密码与班级；无效返回 null
+function apiIdentityInfo($identity, $username) {
+    switch ($identity) {
+        case 'superadmin':
+            return ($username === 'superadmin' && defined('SUPERADMIN_PASSWORD') && SUPERADMIN_PASSWORD !== '')
+                ? ['password' => SUPERADMIN_PASSWORD, 'class' => null]
+                : null;
+        case 'teacher':
+        case 'record':
+            if (!preg_match('/^(\d{1,2})-(\d{1,2})$/', $username, $m)) return null;
+            $class = apiFindClass((int)$m[1], (int)$m[2]);
+            if (!$class) return null;
+            $password = ($identity === 'teacher') ? $class['teacher_password'] : $class['password'];
+            if ($password === '' || $password === null) return null;
+            return ['password' => $password, 'class' => $class];
+    }
+    return null;
+}
+
+function apiFindClass($grade, $class_number) {
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT * FROM classes WHERE grade = ? AND class_number = ?");
+    $stmt->execute([(int)$grade, (int)$class_number]);
+    return $stmt->fetch();
+}
+
+// 认证：返回 ['identity' => ..., 'class' => ...]；失败返回 null
 function apiAuthenticate() {
     // 取 token：Authorization: Bearer xxx 或 ?token=xxx
     $token = null;
@@ -50,28 +95,18 @@ function apiAuthenticate() {
         return null;
     }
 
-    // username = 年级-班号（如 9-6）
     $username = isset($_REQUEST['username']) ? trim($_REQUEST['username']) : (isset($_REQUEST['u']) ? trim($_REQUEST['u']) : '');
-    if (!preg_match('/^(\d{1,2})-(\d{1,2})$/', $username, $m)) {
-        return null;
-    }
-    $grade = (int)$m[1];
-    $class_number = (int)$m[2];
+    if ($username === '') return null;
 
-    $pdo = getDB();
-    $stmt = $pdo->prepare("SELECT * FROM classes WHERE grade = ? AND class_number = ?");
-    $stmt->execute([$grade, $class_number]);
-    $class = $stmt->fetch();
-    if (!$class || empty($class['teacher_password'])) {
-        return null;
-    }
-
-    // 当前/上/下 3 个时段窗口比对
-    $t = time();
-    for ($offset = -1; $offset <= 1; $offset++) {
-        $slot_key = date('YmdH', $t + $offset * 3600);
-        if (hash_equals(apiTokenFor($username, $class['teacher_password'], $slot_key), $token)) {
-            return $class;
+    // 按 superadmin → teacher → record 顺序尝试（密码相同时取更高权限）
+    foreach (['superadmin', 'teacher', 'record'] as $identity) {
+        $info = apiIdentityInfo($identity, $username);
+        if ($info === null) continue;
+        for ($offset = -1; $offset <= 1; $offset++) {
+            $slot = date('YmdH', time() + $offset * 3600);
+            if (hash_equals(apiTokenFor($username, $info['password'], apiSeed($identity, $slot)), $token)) {
+                return ['identity' => $identity, 'class' => $info['class']];
+            }
         }
     }
     return null;
@@ -98,22 +133,67 @@ function apiError($message, $code = 400) {
 
 // ---------- 主流程 ----------
 
-$class = apiAuthenticate();
-if (!$class) {
+$action = isset($_REQUEST['action']) ? trim($_REQUEST['action']) : '';
+
+// 获取种子：无鉴权，客户端凭此 + 用户名 + 密码 本地计算 token
+if ($action === 'get_seed') {
+    $identity = isset($_REQUEST['identity']) ? trim($_REQUEST['identity']) : '';
+    if (!in_array($identity, ['record', 'teacher', 'superadmin'], true)) {
+        apiError('identity 参数无效：可选 record（班级登录）/ teacher（教师管理）/ superadmin（总管理）');
+    }
+    $slot = date('YmdH');
+    apiOut([
+        'success' => true,
+        'data' => [
+            'identity'    => $identity,
+            'slot'        => $slot,
+            'seed'        => apiSeed($identity, $slot),
+            'server_time' => date('Y-m-d H:i:s'),
+            'formula'     => 'token = sha256(用户名 : 密码 : 种子)，该种子仅此身份在当前小时内有效',
+        ],
+    ]);
+}
+
+$auth = apiAuthenticate();
+if (!$auth) {
     apiOut([
         'success' => false,
         'code' => 401,
-        'message' => '认证失败：token 无效或已过期。token 按小时变化，请到教师管理页（admin.php?tab=api）复制最新 token。',
+        'message' => '认证失败：token 无效或已过期。请先调用 action=get_seed（带上身份）获取种子，再用 用户名+密码+种子 计算 token。',
+        'slot' => date('YmdH'), // 客户端可用服务器时槽重算
     ], 401);
 }
 
-// 设置班级上下文（functions.php 的 addRecord/统计等通过 session 读班级）
+$identity = $auth['identity'];
+$class = $auth['class'];
+
+// superadmin：班级从请求参数解析（grade_class=9-6 或 grade + class_number）
+if ($identity === 'superadmin') {
+    $gc = isset($_REQUEST['grade_class']) ? trim($_REQUEST['grade_class']) : '';
+    if ($gc !== '' && preg_match('/^(\d{1,2})-(\d{1,2})$/', $gc, $gm)) {
+        $grade = (int)$gm[1];
+        $class_number = (int)$gm[2];
+    } else {
+        $grade = isset($_REQUEST['grade']) ? (int)$_REQUEST['grade'] : 0;
+        $class_number = isset($_REQUEST['class_number']) ? (int)$_REQUEST['class_number'] : 0;
+    }
+    $class = apiFindClass($grade, $class_number);
+    if (!$class) {
+        apiError('总管理身份需指定班级：grade_class=年级-班号（如 9-6）或 grade + class_number');
+    }
+}
+
 $class_id = (int)$class['id'];
 $_SESSION['class_id'] = $class_id;
 $_SESSION['class_number'] = (int)$class['class_number'];
 $_SESSION['grade'] = (int)$class['grade'];
 
-$action = isset($_REQUEST['action']) ? trim($_REQUEST['action']) : '';
+// 权限：仅教师/总管理可做的端点（record 身份访问 → 403）
+$teacher_only = ['add_student', 'update_student', 'delete_student', 'import_students', 'clear_data', 'clear_all_data'];
+if ($identity === 'record' && in_array($action, $teacher_only, true)) {
+    apiError('该操作需要教师管理或总管理权限（当前身份：班级记录）', 403);
+}
+
 $pdo = getDB();
 
 try {
@@ -129,6 +209,7 @@ try {
                     'class_name'    => getClassName($class['class_number'], $class['grade']),
                     'grade'         => (int)$class['grade'],
                     'class_number'  => (int)$class['class_number'],
+                    'identity'      => $identity,
                     'server_time'   => date('Y-m-d H:i:s', $now),
                     'period_text'   => getPeriodRangeText(),
                     'current_type'  => getCurrentRecordType(), // morning / evening / null
@@ -299,7 +380,7 @@ try {
             break;
 
         default:
-            apiError('未知 action：' . $action . '。可用：status/students/stats/add_record/cancel_record/penalize/add_student/update_student/delete_student/import_students/clear_data/clear_all_data', 400);
+            apiError('未知 action：' . $action . '。可用：get_seed/status/students/stats/add_record/cancel_record/penalize/add_student/update_student/delete_student/import_students/clear_data/clear_all_data', 400);
     }
 } catch (Exception $e) {
     apiError('服务器错误：' . $e->getMessage(), 500);

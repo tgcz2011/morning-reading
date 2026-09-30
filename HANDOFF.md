@@ -303,21 +303,25 @@ git push origin v1.0.0.0
 - 前端：页面打开时从服务器取剩余时间 → `performance.now()` 单调时钟倒计时（不受系统时间修改影响）→ 到期立即 `window.location.href` 跳转
 - 心跳兜底：记录页每 5 分钟、教师页每 30 分钟调用 `heartbeat.php`，服务器端检测到过期返回 `{expired:true, redirect:'...'}`，前端跳转
 
-## 十一、API 设计（api.php，2026-09-30 新增）
+## 十一、API 设计（api.php，2026-09-30 新增，三身份 v1.1）
 
-- **认证**：请求头 `Authorization: Bearer <token>` 或 `?token=`；无状态，不依赖 session 登录。
-- **Token 公式**（种子按小时轮换，满足「今天这个、明天那个、1点这个、2点那个」）：
-  - `slot_key = date('YmdH')`；`slot_seed = sha256(API_SEED . ':' . slot_key)`；`token = sha256(用户名 . ':' . 教师管理密码 . ':' . slot_seed)`
-  - `API_SEED` 在 config.php（生产值 `mr2026_seed_k7x9p2zq`，修改即全校 Token 失效）；用户名 = `年级-班号`（如 `9-6`）
-  - **验证窗口**：当前小时 ± 1（3 个 slot 都试），解决跨整点边界失败
-- **班级上下文**：鉴权后设置 `$_SESSION['class_id']` 等，直接复用 functions.php 的 addRecord/cancelRecord/penalizeStudent/getStatisticsCombined/getAllStudentsStatus 等（它们都从 session 读班级）。
-- **端点**：status / students / stats(period=day|week|month|semester|total) / add_record / cancel_record / penalize / add_student / update_student / delete_student / import_students(JSON 或文本行) / clear_data / clear_all_data。权限与教师管理相同（只操作本班）。
-- **错误**：统一 `{"success":false,"code":HTTP,"message":"..."}`；认证失败 401；未知 action 400。
+- **认证流程（三步，密码与种子永不传输）**：
+  1. `GET api.php?action=get_seed&identity=record|teacher|superadmin`（无需登录）→ 返回当前小时种子
+  2. 客户端本地算 `token = sha256(用户名 : 密码 : 种子)`
+  3. 请求带 `Authorization: Bearer <token>` 或 `?token=`
+- **三种身份**（用户名/密码/种子三者共同决定身份）：
+  - `record`：用户名=年级-班号，密码=classes.password（班级登录密码）；可查名单/统计、加分/取消/扣分
+  - `teacher`：用户名=年级-班号，密码=classes.teacher_password；全部端点（本班）
+  - `superadmin`：用户名=superadmin，密码=SUPERADMIN_PASSWORD；全部端点 + 任意班级（请求需带 `grade_class=9-6`）
+- **种子**：`seed = sha256(API_SEED : date('YmdH') : identity)`，按小时轮换且**同刻三身份互异**；验证窗口当前小时 ±1（3 个 slot 全试）。服务器按 superadmin→teacher→record 顺序尝试匹配（seed 绑身份，客户端用哪个身份取种子就得到哪个身份权限）。
+- **班级上下文**：鉴权后设置 `$_SESSION['class_id']` 等，直接复用 functions.php 的 addRecord/cancelRecord/penalizeStudent/getStatisticsCombined/getAllStudentsStatus（均从 session 读班级）；superadmin 的班级由 grade_class 参数解析。
+- **端点**：get_seed（无鉴权）/ status / students / stats(period=day|week|month|semester|total) / add_record / cancel_record / penalize / add_student / update_student / delete_student / import_students(JSON 或文本行) / clear_data / clear_all_data。record 访问管理端点返回 403。
+- **错误**：统一 `{"success":false,"code":HTTP,"message":"..."}`；认证失败 401（响应附 `slot` 便于重算）；未知 action 400。
 - **中文参数**：URL query 中文在部分环境解析失败，文档建议 `-d` 表单传 `name` 等。
-- **踩坑**：① `penalizeStudent` 成功返回无 `message` 键，api.php 直接读 `$r['message']` 会 Undefined key warning 污染 JSON——已用 `isset()` 兜底；② `parseCsvText` 的 `str_getcsv($line)` 单参数在 PHP 8.4 弃用、warning 会破坏 JSON 响应——已显式传 `escape` 参数。
-- **文档位置**：admin.php?tab=api（教师管理页新 tab，展示当前 Token + 复制按钮 + 公式 + 端点表 + curl 示例）；README.md「API 接口」章节。
+- **踩坑**：① `penalizeStudent` 成功返回无 `message` 键，api.php 直接读 `$r['message']` 会 Undefined key warning 污染 JSON——已用 `isset()` 兜底；② `parseCsvText` 的 `str_getcsv($line)` 单参数在 PHP 8.4 弃用、warning 破坏 JSON——已显式传 escape 参数；③ classes 表班级登录密码字段名是 `password` 而非 `class_password`，写错会全部 401。
+- **文档位置**：admin.php?tab=api（教师管理页，展示教师身份 Token + 复制按钮 + 三身份表 + 端点表 + bash 取种子示例）；README.md「API 接口」章节。
 
-## 十二、已知限制 / 待办
+## 十二、已知限制 / 待办## 十二、已知限制 / 待办
 
 1. **InfinityFree 免费主机限制**：不支持 WebSocket/SSE，单会话踢下线有最多 5 分钟延迟（心跳间隔）；前端倒计时保证到期立即跳转，但被踢下线依赖心跳。
 2. **无外键约束**：删除班级/学生时需手动清理关联记录（当前清空数据功能用 TRUNCATE，正常）。

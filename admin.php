@@ -370,91 +370,102 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                 $api_stmt->execute([$teacher_class_id]);
                 $api_pass = (string)$api_stmt->fetchColumn();
                 $api_slot_key = date('YmdH');
-                $api_slot_seed = hash('sha256', API_SEED . ':' . $api_slot_key);
-                $api_token = hash('sha256', $api_username . ':' . $api_pass . ':' . $api_slot_seed);
+                $api_seed = hash('sha256', API_SEED . ':' . $api_slot_key . ':teacher'); // 教师身份种子
+                $api_token = hash('sha256', $api_username . ':' . $api_pass . ':' . $api_seed);
                 $api_base = 'http://' . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'zztool.free.nf') . '/morning-reading/api.php';
                 ?>
                 <h2 class="stats-title">API 接口文档</h2>
                 <div class="stats-note">
-                    <strong>认证方式：</strong>
-                    <span>请求头 <code>Authorization: Bearer &lt;token&gt;</code>，token 由「用户名 + 教师管理密码 + 种子」生成，种子每小时变化一次（最长约 3 小时、最短约 1 小时有效）。泄露了也不用怕，很快自动失效。</span>
+                    <strong>认证方式（三步）：</strong>
+                    <span>① 调 <code>action=get_seed</code> 获取种子（无需登录，需带身份参数）→ ② 客户端用「用户名 + 密码 + 种子」本地算出 token → ③ 请求头带 <code>Authorization: Bearer &lt;token&gt;</code>（或 <code>?token=</code>）。密码和种子永不通过网络传输；token 每小时随种子轮换自动失效。</span>
                 </div>
 
                 <div class="import-box">
-                    <div class="import-title">我的 API Token（当前时段）</div>
-                    <div class="import-sub">用户名：<code><?php echo $api_username; ?></code>（年级-班号） · 教师管理密码在生成公式中使用 · 种子时槽：<code><?php echo $api_slot_key; ?></code>（北京时间，每小时变化）</div>
+                    <div class="import-title">我的 API Token（教师身份 · 当前时段）</div>
+                    <div class="import-sub">用户名：<code><?php echo $api_username; ?></code>（年级-班号） · 本页展示的是「教师管理」身份 token · 种子时槽：<code><?php echo $api_slot_key; ?></code>（北京时间，每小时变化）</div>
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;">
                         <code id="apiTokenBox" style="font-size:.9rem;background:#efe8d8;padding:8px 12px;border-radius:6px;word-break:break-all;flex:1;min-width:200px;"><?php echo $api_token; ?></code>
                         <button type="button" class="admin-btn solid" id="apiTokenCopyBtn">复制 Token</button>
                         <button type="button" class="admin-btn" id="apiTokenRefreshBtn">刷新显示</button>
                     </div>
-                    <div class="import-sub">Token 生成公式（自己算也行）：<br>
-                        <code>slot_key = date('YmdH')</code>（当前小时）<br>
-                        <code>slot_seed = sha256(API_SEED . ':' . slot_key)</code><br>
-                        <code>token = sha256(用户名 . ':' . 教师管理密码 . ':' . slot_seed)</code><br>
-                        验证窗口为当前小时 ± 1 小时，跨整点请求会自动通过。
+                    <div class="import-sub"><strong>三种身份</strong>（用户名/密码不同，种子也不同 → token 互不相同，权限从低到高）：</div>
+                    <table class="ranking-table" style="margin:10px 0 14px;">
+                        <thead><tr><th width="14%">身份</th><th width="20%">用户名</th><th width="26%">密码</th><th width="40%">可用操作</th></tr></thead>
+                        <tbody>
+                            <tr><td>record 班级记录</td><td><code>9-6</code></td><td>班级登录密码</td><td>查名单/统计、加分、取消、扣分</td></tr>
+                            <tr><td>teacher 教师管理</td><td><code>9-6</code></td><td>教师管理密码</td><td>全部端点（本班，与本页一致）</td></tr>
+                            <tr><td>superadmin 总管理</td><td><code>superadmin</code></td><td>总管理密码</td><td>全部端点 + 任意班级（需 <code>grade_class=9-6</code>）</td></tr>
+                        </tbody>
+                    </table>
+                    <div class="import-sub">Token 生成（客户端本地算）：<br>
+                        <code>种子 = get_seed 接口返回</code>（同一时刻三种身份的种子互不相同；有效约 1~3 小时）<br>
+                        <code>token = sha256(用户名 . ':' . 密码 . ':' . 种子)</code><br>
+                        跨整点窗口（±1 小时）请求自动通过；密码永不出现在请求中。
                     </div>
                 </div>
 
-                <h3 class="stats-title" style="font-size:1.05rem;">端点一览</h3>
+                <h3 class="stats-title" style="font-size:1.05rem;">端点一览（最低身份）</h3>
                 <table class="ranking-table" style="margin-bottom:18px;">
                     <thead>
                         <tr>
-                            <th width="16%">方法</th>
+                            <th width="12%">方法</th>
                             <th width="34%">端点</th>
-                            <th width="50%">说明</th>
+                            <th width="18%">最低身份</th>
+                            <th width="36%">说明</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td>GET</td><td><code>action=status</code></td><td>班级信息、当前时段、是否可记录、token 时槽</td></tr>
-                        <tr><td>GET</td><td><code>action=students</code></td><td>学生名单（学号/姓名/今日早读晚读/周得分/已加分）</td></tr>
-                        <tr><td>GET</td><td><code>action=stats&amp;period=week</code></td><td>统计排行；period 可选 day/week/month/semester/total</td></tr>
-                        <tr><td>POST</td><td><code>action=add_record&amp;student_no=1</code></td><td>加分（一次朗读最多加一分；自动抵消本周负分）</td></tr>
-                        <tr><td>POST</td><td><code>action=cancel_record&amp;student_no=1</code></td><td>取消本次朗读记录</td></tr>
-                        <tr><td>POST</td><td><code>action=penalize&amp;student_no=1</code></td><td>扣分（不限次数；优先抵消本周正分）</td></tr>
-                        <tr><td>POST</td><td><code>action=add_student&amp;student_no=1</code></td><td>添加学生；<code>name</code> 建议用 <code>-d</code> 表单传（中文）</td></tr>
-                        <tr><td>POST</td><td><code>action=update_student&amp;student_no=1&amp;name=李四</code></td><td>修改学生姓名；可加 <code>new_no=</code> 改学号</td></tr>
-                        <tr><td>POST</td><td><code>action=delete_student&amp;student_no=1</code></td><td>删除学生（同时删除其全部记录）</td></tr>
-                        <tr><td>POST</td><td><code>action=import_students</code></td><td>批量导入（JSON 或文本行，冲突自动覆盖）</td></tr>
-                        <tr><td>POST</td><td><code>action=clear_data</code></td><td>清空本班记录（保留名单）</td></tr>
-                        <tr><td>POST</td><td><code>action=clear_all_data</code></td><td>清空本班全部数据（含名单）</td></tr>
+                        <tr><td>GET</td><td><code>action=get_seed&amp;identity=record/teacher/superadmin</code></td><td>无需登录</td><td>获取当前小时种子（identity 三种任选）</td></tr>
+                        <tr><td>GET</td><td><code>action=status</code></td><td>record</td><td>班级信息、当前时段、是否可记录、token 时槽、身份</td></tr>
+                        <tr><td>GET</td><td><code>action=students</code></td><td>record</td><td>学生名单（学号/姓名/今日早读晚读/周得分/已加分）</td></tr>
+                        <tr><td>GET</td><td><code>action=stats&amp;period=week</code></td><td>record</td><td>统计排行；period 可选 day/week/month/semester/total</td></tr>
+                        <tr><td>POST</td><td><code>action=add_record&amp;student_no=1</code></td><td>record</td><td>加分（一次朗读最多加一分；自动抵消本周负分）</td></tr>
+                        <tr><td>POST</td><td><code>action=cancel_record&amp;student_no=1</code></td><td>record</td><td>取消本次朗读记录</td></tr>
+                        <tr><td>POST</td><td><code>action=penalize&amp;student_no=1</code></td><td>record</td><td>扣分（不限次数；优先抵消本周正分）</td></tr>
+                        <tr><td>POST</td><td><code>action=add_student&amp;student_no=1</code></td><td>teacher</td><td>添加学生；<code>name</code> 建议用 <code>-d</code> 表单传（中文）</td></tr>
+                        <tr><td>POST</td><td><code>action=update_student&amp;student_no=1</code></td><td>teacher</td><td>修改学生姓名；可加 <code>new_no=</code> 改学号</td></tr>
+                        <tr><td>POST</td><td><code>action=delete_student&amp;student_no=1</code></td><td>teacher</td><td>删除学生（同时删除其全部记录）</td></tr>
+                        <tr><td>POST</td><td><code>action=import_students</code></td><td>teacher</td><td>批量导入（JSON 或文本行，冲突自动覆盖）</td></tr>
+                        <tr><td>POST</td><td><code>action=clear_data</code></td><td>teacher</td><td>清空本班记录（保留名单）</td></tr>
+                        <tr><td>POST</td><td><code>action=clear_all_data</code></td><td>teacher</td><td>清空本班全部数据（含名单）</td></tr>
                     </tbody>
                 </table>
 
-                <h3 class="stats-title" style="font-size:1.05rem;">调用示例（curl）</h3>
-                <pre class="api-pre"># 1. 查看学生名单
-curl "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=students" \
-  -H "Authorization: Bearer <?php echo $api_token; ?>"
+                <h3 class="stats-title" style="font-size:1.05rem;">调用示例（bash：先取种子，再算 token）</h3>
+                <pre class="api-pre"># ① 获取教师身份种子（无需登录；identity 可换 record/superadmin）
+SEED=$(curl -s "<?php echo $api_base; ?>?action=get_seed&identity=teacher" | \
+  python3 -c "import json,sys;print(json.load(sys.stdin)['data']['seed'])")
 
-# 2. 本周统计排行
-curl "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=stats&amp;period=week" \
-  -H "Authorization: Bearer <?php echo $api_token; ?>"
+# ② 用「用户名:密码:种子」算 token（用户名=<?php echo $api_username; ?>，密码=教师管理密码，请替换为真实密码）
+TOKEN=$(printf '%s' "<?php echo $api_username; ?>:教师管理密码:$SEED" | sha256sum | cut -d' ' -f1)
 
-# 3. 给学号 3 加分（自动判断早读/晚读时段）
-curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=add_record&amp;student_no=3" \
-  -H "Authorization: Bearer <?php echo $api_token; ?>"
+# ③ 查看学生名单
+curl "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&action=students" \
+  -H "Authorization: Bearer $TOKEN"
 
-# 3b. 添加学生（中文参数建议用 -d 表单传，避免 URL 编码问题）
-curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=add_student" \
-  -H "Authorization: Bearer <?php echo $api_token; ?>" \
-  -d "student_no=6" \
-  -d "name=王小明"
+# ④ 给学号 3 加分（自动判断早读/晚读时段）
+curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&action=add_record&student_no=3" \
+  -H "Authorization: Bearer $TOKEN"
 
-# 4. 批量导入（JSON 格式，学号已存在的自动覆盖姓名）
-curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=import_students" \
-  -H "Authorization: Bearer <?php echo $api_token; ?>" \
-  -H "Content-Type: application/json" \
+# ⑤ 添加学生（中文参数建议用 -d 表单传，避免 URL 编码问题）
+curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&action=add_student" \
+  -H "Authorization: Bearer $TOKEN" -d "student_no=6" -d "name=王小明"
+
+# ⑥ 批量导入（JSON，学号已存在自动覆盖姓名）
+curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&action=import_students" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"students":[{"no":1,"name":"张三"},{"no":2,"name":"李四"}]}'
 
-# 5. 文本行格式导入（每行：学号,姓名）
-curl -X POST "<?php echo $api_base; ?>?username=<?php echo $api_username; ?>&amp;action=import_students" \
-  -H "Authorization: Bearer <?php echo $api_token; ?>" \
-  --data-binary $'1,张三
-2,李四'</pre>
+# ⑦ 总管理身份操作任意班级（如 8-3）：换种子身份即可
+SEED=$(curl -s "<?php echo $api_base; ?>?action=get_seed&identity=superadmin" | \
+  python3 -c "import json,sys;print(json.load(sys.stdin)['data']['seed'])")
+TOKEN=$(printf '%s' "superadmin:总管理密码:$SEED" | sha256sum | cut -d' ' -f1)
+curl "<?php echo $api_base; ?>?username=superadmin&action=students&grade_class=8-3" \
+  -H "Authorization: Bearer $TOKEN"</pre>
 
                 <div class="stats-note">
                     <strong>安全提示：</strong>
-                    <span>① Token 每小时变化，请在调用前到本页复制最新 Token；② API 权限与教师管理相同，只操作本班数据；③ 修改 config.php 中的 <code>API_SEED</code> 可使全校所有 Token 立即失效；④ 请勿把 Token 提交到公开仓库或分享给他人。</span>
+                    <span>① <code>get_seed</code> 无需登录即可取种子，但没有密码就算不出 token；② 密码永不进入请求，中间人最多拿到当小时有效的 token；③ 修改 config.php 中的 <code>API_SEED</code> 可使全校所有 token 立即失效；④ 总管理身份可操作任意班级，token 请勿泄露或提交到公开仓库；⑤ 本页展示的是教师身份 token，用班级登录身份请将 get_seed 的 identity 换成 record。</span>
                 </div>
                 <script>
                     // 复制当前 Token

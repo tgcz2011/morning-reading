@@ -30,7 +30,7 @@ define('APP_VERSION', '1.0.0.0');
 define('APP_AUTHOR', '陈彦均');
 define('APP_REPO', 'https://github.com/tgcz2011/morning-reading');
 
-// API 种子：参与 API token 计算（种子按小时轮换 = sha256(API_SEED . ':' . 当前小时)）
+// API 种子：参与 API token 计算。种子 = sha256(API_SEED . ':' . 当前小时 . ':' . 身份)，三种身份（record/teacher/superadmin）同刻互异；
 // 修改此值会使所有 API token 立即失效，需到教师管理页重新获取；请设置随机长字符串
 define('API_SEED', '请填写随机种子字符串');
 
