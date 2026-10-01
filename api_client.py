@@ -8,6 +8,13 @@ morning-reading API 自动客户端（纯 Python 标准库，零依赖）
 本客户端内嵌 AES-128 解密，自动完成挑战，调用方无需关心任何挑战细节，
 也不需要 openssl / Node / pip 包。
 
+速度设计（与"直接调 API"几乎无差别）：
+- token 缓存：同一小时槽内的 token 复用（内存 + ~/.morning_reading_api_cache.json 文件），
+  不重复调 get_seed，普通调用只有 1 次 HTTP 往返；
+- 挑战 cookie 缓存：__test 有效期 6 小时，落盘后同机复用，不会每次重新过挑战；
+- 自动恢复：token 跨小时轮换（±1 小时窗口）时，遇到 401 自动重新取种子算 token 重试；
+  挑战 cookie 过期时，请求会拿到挑战页，客户端自动解密重试——都无需调用方干预。
+
 用法示例：
     python3 api_client.py --identity teacher --user 9-6 --pass 教师密码 verify_token
     python3 api_client.py --identity teacher --user 9-6 --pass 教师密码 students
@@ -18,18 +25,25 @@ morning-reading API 自动客户端（纯 Python 标准库，零依赖）
 认证流程（与教师管理页文档一致）：
     1) GET action=get_seed&identity=<身份>  （无需登录，自动过挑战）
     2) token = sha256(用户名 : 密码 : 种子)
-    3) 请求带 Authorization: Bearer <token> 或 ?token=<token>
+    3) 请求带 ?token=<token>（等价于 Authorization: Bearer）
 """
 
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 DEFAULT_BASE = "http://zztool.free.nf/morning-reading/api.php"
+CACHE_FILE = os.path.join(os.path.expanduser("~"), ".morning_reading_api_cache.json")
+_TOKEN_MAX_AGE = 7200      # token 缓存最长 2 小时（跨小时 ±1 窗口足够）
+_COOKIE_MAX_AGE = 21600    # InfinityFree 挑战 cookie 有效期 6 小时
 
 # ---------- InfinityFree 挑战密钥（挑战页明文公开，非项目机密） ----------
 _CHAL_KEY_HEX = "f655ba9d09a112d4968c63579db590b4"
@@ -157,7 +171,7 @@ def aes128_decrypt_block(cipher: bytes, key: bytes) -> bytes:
     return bytes(state[i][j] for j in range(4) for i in range(4))
 
 
-def _solve_challenge_cookie(html: str) -> str | None:
+def _solve_challenge_cookie(html: str):
     """从挑战页提取并解出 __test cookie 值；非挑战页返回 None。"""
     m = re.search(r'c=toNumbers\("([0-9a-f]{32,})"\)', html)
     if not m:
@@ -170,80 +184,136 @@ def _solve_challenge_cookie(html: str) -> str | None:
     return first.hex()
 
 
+# ---------- 本地缓存（token / 挑战 cookie 落盘，同机复用） ----------
+def _load_cache():
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_cache(cache):
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+    except Exception:
+        pass  # 缓存写失败不影响功能
+
+
 # ---------- 自动过挑战的 HTTP 会话 ----------
 class ApiSession:
-    def __init__(self, base: str):
+    def __init__(self, base: str, use_file_cache: bool = True):
         self.base = base
-        self.cookie = None  # __test cookie，缓存 6 小时内复用
+        self.cookie = None
+        self.cache = _load_cache() if use_file_cache else {}
+        c = self.cache.get("cookie")
+        if c and c.get("value") and c.get("expires_ts", 0) > time.time():
+            self.cookie = c["value"]
 
-    def _open(self, url: str):
-        req = urllib.request.Request(url, headers={
+    def _open(self, url: str, data: bytes | None = None) -> str:
+        req = urllib.request.Request(url, data=data, headers={
             "User-Agent": _UA,
             "Accept": "*/*",
+            "Content-Type": "application/x-www-form-urlencoded" if data else "text/plain;charset=UTF-8",
         })
         if self.cookie:
             req.add_header("Cookie", f"__test={self.cookie}")
-        return urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+        try:
+            return urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            # 401/403（token 无效、权限不足）与 400（POST 遇挑战）都带可读 body，
+            # 读出来交给上层处理（401 重试 / 挑战页自动解密 / 业务错误）
+            return e.read().decode("utf-8", "replace")
 
-    def request(self, params: dict) -> str:
-        """带参数请求，自动处理挑战；返回服务端真实响应文本。"""
-        url = self.base + "?" + urllib.parse.urlencode(params)
-        body = self._open(url)
-        cookie = _solve_challenge_cookie(body)
-        if cookie is not None:
+    def request(self, url: str, data: bytes | None = None) -> str:
+        """带参数请求，自动处理挑战；返回服务端真实响应文本。
+
+        挑战 cookie 过期/丢失时，服务器会返回挑战页 → 自动解密新 cookie →
+        带 cookie 重访（附加 i=1）。循环最多 3 次，之后仍失败则报错。
+        """
+        for attempt in range(3):
+            body = self._open(url, data)
+            cookie = _solve_challenge_cookie(body)
+            if cookie is None:
+                return body
             self.cookie = cookie
-            body = self._open(url + "&i=1")  # 挑战页要求的重访标记
-        return body
+            self.cache["cookie"] = {"value": cookie, "expires_ts": time.time() + _COOKIE_MAX_AGE}
+            _save_cache(self.cache)
+            if "i=1" not in url:
+                url = url + ("&" if "?" in url else "?") + "i=1"
+        raise RuntimeError("连续 3 次请求仍被 InfinityFree 挑战拦截，请稍后再试")
 
 
 # ---------- API 客户端 ----------
 class ApiClient:
-    def __init__(self, base=DEFAULT_BASE):
-        self.session = ApiSession(base)
-
-    def get_seed(self, identity: str) -> str:
-        body = self.session.request({"action": "get_seed", "identity": identity})
-        data = json.loads(body)
-        if not data.get("success"):
-            raise RuntimeError(f"get_seed 失败: {data}")
-        return data["data"]["seed"]
+    def __init__(self, base: str = DEFAULT_BASE, use_file_cache: bool = True):
+        self.session = ApiSession(base, use_file_cache)
+        self.cache = self.session.cache
 
     @staticmethod
     def calc_token(seed: str, username: str, password: str) -> str:
         return hashlib.sha256(f"{username}:{password}:{seed}".encode()).hexdigest()
 
+    def _cached_token(self, identity: str, username: str, password: str):
+        """取缓存 token；无缓存/跨小时/超时则 get_seed 重算。返回 token。"""
+        key = f"{username}:{identity}"
+        now = time.time()
+        t = self.cache.get("tokens", {}).get(key)
+        if t and t.get("slot") == datetime.now().strftime("%Y%m%d%H") \
+                and now - t.get("ts", 0) < _TOKEN_MAX_AGE:
+            return t["token"]
+        body = self.session.request(self.session.base + "?" + urllib.parse.urlencode(
+            {"action": "get_seed", "identity": identity}))
+        data = json.loads(body)
+        if not data.get("success"):
+            raise RuntimeError(f"get_seed 失败: {data}")
+        seed = data["data"]["seed"]
+        token = self.calc_token(seed, username, password)
+        self.cache.setdefault("tokens", {})[key] = {
+            "slot": data["data"].get("slot") or datetime.now().strftime("%Y%m%d%H"),
+            "token": token,
+            "ts": now,
+        }
+        _save_cache(self.cache)
+        return token
+
     def call(self, action: str, username: str, password: str, identity: str,
              extra: dict | None = None, method: str = "GET") -> dict:
-        seed = self.get_seed(identity)
-        token = self.calc_token(seed, username, password)
-        params = {"username": username, "action": action}
+        """调用端点：带缓存 token 请求；401（跨小时轮换）时自动重取 token 重试一次。
+
+        普通调用只有 1 次 HTTP 往返，速度与直接调 API 基本一致。
+        """
+        base_params = {"username": username, "action": action}
         if extra:
-            params.update(extra)
+            base_params.update(extra)
+
+        token = self._cached_token(identity, username, password)
+        data = self._parse_json(self._raw_call(base_params, token, method))
+
+        # 401 → token 跨小时失效，强制刷新重试一次
+        if not data.get("success") and data.get("code") == 401:
+            key = f"{username}:{identity}"
+            self.cache.get("tokens", {}).pop(key, None)
+            token = self._cached_token(identity, username, password)
+            data = self._parse_json(self._raw_call(base_params, token, method))
+        return data
+
+    @staticmethod
+    def _parse_json(body: str) -> dict:
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError:
+            snippet = body[:200].replace("\n", " ")
+            raise RuntimeError(f"服务端返回了非 JSON 响应（可能是临时故障或挑战异常）：{snippet}")
+
+    def _raw_call(self, base_params: dict, token: str, method: str) -> str:
+        params = dict(base_params)
+        params["token"] = token
+        url = self.session.base + "?" + urllib.parse.urlencode(params)
         if method == "POST":
-            url = self.session.base
-            data = urllib.parse.urlencode(params).encode()
-            req = urllib.request.Request(url, data=data, headers={
-                "User-Agent": _UA, "Content-Type": "application/x-www-form-urlencoded"})
-            if self.session.cookie:
-                req.add_header("Cookie", f"__test={self.session.cookie}")
-            try:
-                body = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
-            except Exception:
-                # 挑战 cookie 可能已过期，重新走挑战流程
-                self.session.cookie = None
-                seed = self.get_seed(identity)
-                token = self.calc_token(seed, username, password)
-                params["token"] = token
-                data = urllib.parse.urlencode(params).encode()
-                req = urllib.request.Request(url, data=data, headers={
-                    "User-Agent": _UA, "Content-Type": "application/x-www-form-urlencoded"})
-                if self.session.cookie:
-                    req.add_header("Cookie", f"__test={self.session.cookie}")
-                body = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
-        else:
-            params["token"] = token
-            body = self.session.request(params)
-        return json.loads(body)
+            return self.session.request(self.session.base, urllib.parse.urlencode(params).encode())
+        return self.session.request(url)
 
 
 # ---------- CLI ----------
@@ -257,13 +327,15 @@ def main(argv=None):
     ap.add_argument("--period", default=None, help="stats 的统计周期：day/week/month/semester/total")
     ap.add_argument("--student-no", default=None, help="add_record/cancel_record/penalize 的学号")
     ap.add_argument("--grade-class", default=None, help="superadmin 跨班时指定班级，如 9-6")
+    ap.add_argument("--no-cache", action="store_true", help="不使用本地缓存文件（cookie/token 均不落盘）")
     ap.add_argument("--raw", action="store_true", help="输出原始 JSON（不做中文美化）")
     args = ap.parse_args(argv)
 
-    client = ApiClient(args.base)
+    client = ApiClient(args.base, use_file_cache=not args.no_cache)
 
     if args.action == "get_seed":
-        body = client.session.request({"action": "get_seed", "identity": args.identity})
+        body = client.session.request(client.session.base + "?" + urllib.parse.urlencode(
+            {"action": "get_seed", "identity": args.identity}))
         print(json.dumps(json.loads(body), ensure_ascii=False, indent=2))
         return
 
