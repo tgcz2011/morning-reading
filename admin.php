@@ -464,7 +464,28 @@ TOKEN=$(printf '%s' "superadmin:总管理密码:$SEED" | sha256sum | cut -d' ' -
 curl "<?php echo $api_base; ?>?username=superadmin&action=students&grade_class=8-3" \
   -H "Authorization: Bearer $TOKEN"</pre>
 
+                <h3 class="stats-title" style="font-size:1.05rem;">直接调用遇到挑战页怎么办？用自动客户端（api_client.py）</h3>
+                <div class="import-sub" style="margin-bottom:10px;">
+                    InfinityFree 免费托管会对"非浏览器"请求注入 JS 挑战页（浏览器会自动执行并放行，所以网页使用无感；
+                    curl / 脚本因为没有 JS 引擎，第一次请求会拿到挑战页而不是 JSON）。<br>
+                    这是托管平台在 PHP 执行前注入的防护，<b>服务器端无法在源码里关闭</b>（免费套餐强制，升级付费可去除）。
+                    解决办法是把"过挑战"做进调用端 —— 项目提供了纯 Python 标准库、零依赖的自动客户端，
+                    自动完成挑战 + 自动取种子算 token，调用方完全无感：
+                </div>
+                <pre class="api-pre"># 下载（GitHub 或本站）：api_client.py
+# 验证 token 是否有效
+python3 api_client.py --identity teacher --user <?php echo $api_username; ?> --pass 教师密码 verify_token
+# 查看学生名单
+python3 api_client.py --identity record --user <?php echo $api_username; ?> --pass 班级密码 students
+# 周统计
+python3 api_client.py --identity record --user <?php echo $api_username; ?> --pass 班级密码 stats --period week
+# 给学号 3 加分（自动判断时段）
+python3 api_client.py --identity record --user <?php echo $api_username; ?> --pass 班级密码 add_record --student-no 3
+# 总管理操作任意班级
+python3 api_client.py --identity superadmin --user superadmin --pass 总管理密码 status --grade-class 8-3</pre>
+
                 <div class="stats-note">
+                    <strong>安全提示：</strong>
                     <strong>安全提示：</strong>
                     <span>① <code>get_seed</code> 无需登录即可取种子，但没有密码就算不出 token；② 密码永不进入请求，中间人最多拿到当小时有效的 token；③ 修改 config.php 中的 <code>API_SEED</code> 可使全校所有 token 立即失效；④ 总管理身份可操作任意班级，token 请勿泄露或提交到公开仓库；⑤ 本页展示的是教师身份 token，用班级登录身份请将 get_seed 的 identity 换成 record。</span>
                 </div>

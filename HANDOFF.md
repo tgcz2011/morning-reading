@@ -72,7 +72,7 @@ MySQL / MariaDB（InnoDB，utf8mb4）
 
 ### 部署与主机（InfinityFree 免费主机）
 1. **tempnam() 返回 false 导致 ZipArchive 500**：InfinityFree 禁用临时目录，`tempnam()` 返回 false，ZipArchive 打开失败。修复：纯 PHP 手写标准 ZIP 字节流输出模板下载（`outputStudentTemplate`）。
-2. **JS 挑战页**：InfinityFree 对非浏览器 UA 返回 JS 挑战页。curl 验证需：UA `Mozilla/5.0` → 正则取 `c=toNumbers("...")` → `openssl aes-128-cbc` 解密得 `__test` cookie → 第二次带 Cookie 访问同 URL 加 `?i=1` 才是真实页面。
+2. **JS 挑战页**：InfinityFree 对非浏览器 UA 返回 JS 挑战页（平台层在 PHP 执行前注入，**服务器端源码无法关闭**；免费套餐强制，付费可去除）。curl 验证需：UA `Mozilla/5.0` → 正则取 `c=toNumbers("...")` → 解密得 `__test` cookie（挑战页明文给出 AES 密钥/IV：`f655ba9d09a112d4968c63579db590b4` / `98344c2eee86c3994890592585b49f80`；mac 沙箱 openssl 动态库曾坏，可用 PHP `openssl_decrypt` 或 api_client.py 内嵌纯 Python AES 解密）→ 第二次带 Cookie 访问同 URL 加 `?i=1` 才是真实页面；cookie 有效期 6 小时。
 3. **HTTP 可用，HTTPS 返回 000**：InfinityFree 免费主机的 SSL 证书有时异常，用 `http://` 访问。
 4. **不支持 WebSocket/SSE 长连接**：免费主机不支持常驻进程，单会话踢下线用心跳 + 前端倒计时替代。
 5. **FTP 部署必须回读 md5 校验**：HTTP 访问 PHP 文件返回执行结果（或挑战页），无法直接比对内容；用 FTP 回读文件算 md5 确认部署一致。
@@ -315,7 +315,8 @@ git push origin v1.0.0.0
   - `superadmin`：用户名=superadmin，密码=SUPERADMIN_PASSWORD；全部端点 + 任意班级（请求需带 `grade_class=9-6`）
 - **种子**：`seed = sha256(API_SEED : date('YmdH') : identity)`，按小时轮换且**同刻三身份互异**；验证窗口当前小时 ±1（3 个 slot 全试）。服务器按 superadmin→teacher→record 顺序尝试匹配（seed 绑身份，客户端用哪个身份取种子就得到哪个身份权限）。
 - **班级上下文**：鉴权后设置 `$_SESSION['class_id']` 等，直接复用 functions.php 的 addRecord/cancelRecord/penalizeStudent/getStatisticsCombined/getAllStudentsStatus（均从 session 读班级）；superadmin 的班级由 grade_class 参数解析。
-- **端点**：get_seed（无鉴权）/ verify_token（返回 valid/身份/剩余有效期，无效 200+valid=false）/ status / students / stats(period=day|week|month|semester|total) / add_record / cancel_record / penalize / add_student / update_student / delete_student / import_students(JSON 或文本行) / clear_data / clear_all_data。record 访问管理端点返回 403。
+- **端点**：get_seed（无鉴权）/ verify_token（返回 valid/身份/剩余有效期，无效 200+valid=false）/ status / students
+- **自动客户端**：`api_client.py`（纯 Python 标准库、零依赖）内嵌 AES-128 解密自动过 InfinityFree 挑战，自动取种子算 token；CLI 用法见文件头注释与 admin.php API 文档页。 / stats(period=day|week|month|semester|total) / add_record / cancel_record / penalize / add_student / update_student / delete_student / import_students(JSON 或文本行) / clear_data / clear_all_data。record 访问管理端点返回 403。
 - **错误**：统一 `{"success":false,"code":HTTP,"message":"..."}`；认证失败 401（响应附 `slot` 便于重算）；未知 action 400。
 - **中文参数**：URL query 中文在部分环境解析失败，文档建议 `-d` 表单传 `name` 等。
 - **踩坑**：① `penalizeStudent` 成功返回无 `message` 键，api.php 直接读 `$r['message']` 会 Undefined key warning 污染 JSON——已用 `isset()` 兜底；② `parseCsvText` 的 `str_getcsv($line)` 单参数在 PHP 8.4 弃用、warning 破坏 JSON——已显式传 escape 参数；③ classes 表班级登录密码字段名是 `password` 而非 `class_password`，写错会全部 401。

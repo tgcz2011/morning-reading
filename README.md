@@ -148,6 +148,20 @@ SEED=$(curl -s ".../api.php?action=get_seed&identity=teacher" | python3 -c "impo
 TOKEN=$(printf '%s' "9-6:教师管理密码:$SEED" | sha256sum | cut -d' ' -f1)
 
 curl ".../api.php?username=9-6&action=students" -H "Authorization: Bearer $TOKEN"
+
+> **curl 拿到挑战页？** InfinityFree 免费托管对非浏览器请求注入 JS 挑战页（浏览器自动执行所以网页无感）。
+> 服务器端无法在源码里关闭（平台层防护，免费套餐强制）。用项目自带的自动客户端即可完全无感调用：
+
+```
+# api_client.py：纯 Python 标准库、零依赖，自动完成挑战 + 自动取种子算 token
+python3 api_client.py --identity teacher   --user 9-6 --pass 教师密码 verify_token   # 验证 token 是否有效
+python3 api_client.py --identity record    --user 9-6 --pass 班级密码 students       # 学生名单
+python3 api_client.py --identity record    --user 9-6 --pass 班级密码 stats --period week
+python3 api_client.py --identity record    --user 9-6 --pass 班级密码 add_record --student-no 3
+python3 api_client.py --identity superadmin --user superadmin --pass 总管理密码 status --grade-class 8-3
+```
+
+其他语言调用只需两步：① 请求带浏览器 UA 时第一次遇到挑战页，用挑战页中的 `c=toNumbers("...")`（配合页内明文给出的 AES 密钥/IV）解出 `__test` cookie；② 带该 cookie 重访同 URL 并附加 `?i=1`。cookie 有效期 6 小时，同 IP 内复用即可。
 ```
 
 ### 端点
