@@ -155,6 +155,7 @@ curl ".../api.php?username=9-6&action=students" -H "Authorization: Bearer $TOKEN
 | 方法 | action | 参数 | 最低身份 | 说明 |
 |------|--------|------|----------|------|
 | GET | `get_seed` | `identity=record/teacher/superadmin` | 无需登录 | 获取当前小时种子 |
+| GET | `verify_token` | — | record | 验证 token 是否有效（返回 `valid`/身份/剩余有效期；无效返回 200 + `valid=false`） |
 | GET | `status` | — | record | 班级信息、当前时段、是否可记录、Token 时槽、身份 |
 | GET | `students` | — | record | 学生名单（学号/姓名/今日早读晚读/周得分/已加分） |
 | GET | `stats` | `period=day/week/month/semester/total` | record | 统计排行 |

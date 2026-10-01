@@ -416,6 +416,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                     </thead>
                     <tbody>
                         <tr><td>GET</td><td><code>action=get_seed&amp;identity=record/teacher/superadmin</code></td><td>无需登录</td><td>获取当前小时种子（identity 三种任选）</td></tr>
+                        <tr><td>GET</td><td><code>action=verify_token</code></td><td>record</td><td>验证 token 是否有效，返回 valid/身份/剩余有效期（无效返回 200 + valid=false）</td></tr>
                         <tr><td>GET</td><td><code>action=status</code></td><td>record</td><td>班级信息、当前时段、是否可记录、token 时槽、身份</td></tr>
                         <tr><td>GET</td><td><code>action=students</code></td><td>record</td><td>学生名单（学号/姓名/今日早读晚读/周得分/已加分）</td></tr>
                         <tr><td>GET</td><td><code>action=stats&amp;period=week</code></td><td>record</td><td>统计排行；period 可选 day/week/month/semester/total</td></tr>

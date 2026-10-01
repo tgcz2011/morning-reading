@@ -315,7 +315,7 @@ git push origin v1.0.0.0
   - `superadmin`：用户名=superadmin，密码=SUPERADMIN_PASSWORD；全部端点 + 任意班级（请求需带 `grade_class=9-6`）
 - **种子**：`seed = sha256(API_SEED : date('YmdH') : identity)`，按小时轮换且**同刻三身份互异**；验证窗口当前小时 ±1（3 个 slot 全试）。服务器按 superadmin→teacher→record 顺序尝试匹配（seed 绑身份，客户端用哪个身份取种子就得到哪个身份权限）。
 - **班级上下文**：鉴权后设置 `$_SESSION['class_id']` 等，直接复用 functions.php 的 addRecord/cancelRecord/penalizeStudent/getStatisticsCombined/getAllStudentsStatus（均从 session 读班级）；superadmin 的班级由 grade_class 参数解析。
-- **端点**：get_seed（无鉴权）/ status / students / stats(period=day|week|month|semester|total) / add_record / cancel_record / penalize / add_student / update_student / delete_student / import_students(JSON 或文本行) / clear_data / clear_all_data。record 访问管理端点返回 403。
+- **端点**：get_seed（无鉴权）/ verify_token（返回 valid/身份/剩余有效期，无效 200+valid=false）/ status / students / stats(period=day|week|month|semester|total) / add_record / cancel_record / penalize / add_student / update_student / delete_student / import_students(JSON 或文本行) / clear_data / clear_all_data。record 访问管理端点返回 403。
 - **错误**：统一 `{"success":false,"code":HTTP,"message":"..."}`；认证失败 401（响应附 `slot` 便于重算）；未知 action 400。
 - **中文参数**：URL query 中文在部分环境解析失败，文档建议 `-d` 表单传 `name` 等。
 - **踩坑**：① `penalizeStudent` 成功返回无 `message` 键，api.php 直接读 `$r['message']` 会 Undefined key warning 污染 JSON——已用 `isset()` 兜底；② `parseCsvText` 的 `str_getcsv($line)` 单参数在 PHP 8.4 弃用、warning 破坏 JSON——已显式传 escape 参数；③ classes 表班级登录密码字段名是 `password` 而非 `class_password`，写错会全部 401。

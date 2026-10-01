@@ -155,6 +155,31 @@ if ($action === 'get_seed') {
 }
 
 $auth = apiAuthenticate();
+
+// 验证 token 有效性：带 token 请求，返回 valid=true/false（无效也返回 200，方便客户端直接判断）
+if ($action === 'verify_token') {
+    if (!$auth) {
+        apiOut(['success' => true, 'valid' => false, 'data' => ['slot' => date('YmdH')]]);
+    }
+    $v_username = isset($_REQUEST['username']) ? trim($_REQUEST['username']) : (isset($_REQUEST['u']) ? trim($_REQUEST['u']) : '');
+    $slot = date('YmdH');
+    $expires_at = strtotime(date('Y-m-d H:00:00')) + 7200; // 当前小时结束 + 1 小时缓冲 = 最晚失效时刻
+    $data = [
+        'identity'         => $auth['identity'],
+        'username'         => $v_username,
+        'slot'             => $slot,
+        'server_time'      => date('Y-m-d H:i:s'),
+        'expires_at'       => date('Y-m-d H:i:s', $expires_at),
+        'remaining_seconds'=> max(0, $expires_at - time()),
+    ];
+    if ($auth['class']) {
+        $data['class_name']    = getClassName($auth['class']['class_number'], $auth['class']['grade']);
+        $data['grade']         = (int)$auth['class']['grade'];
+        $data['class_number']  = (int)$auth['class']['class_number'];
+    }
+    apiOut(['success' => true, 'valid' => true, 'data' => $data]);
+}
+
 if (!$auth) {
     apiOut([
         'success' => false,
@@ -380,7 +405,7 @@ try {
             break;
 
         default:
-            apiError('未知 action：' . $action . '。可用：get_seed/status/students/stats/add_record/cancel_record/penalize/add_student/update_student/delete_student/import_students/clear_data/clear_all_data', 400);
+            apiError('未知 action：' . $action . '。可用：get_seed/verify_token/status/students/stats/add_record/cancel_record/penalize/add_student/update_student/delete_student/import_students/clear_data/clear_all_data', 400);
     }
 } catch (Exception $e) {
     apiError('服务器错误：' . $e->getMessage(), 500);
