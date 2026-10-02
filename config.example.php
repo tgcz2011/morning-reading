@@ -23,7 +23,7 @@ define('SUPERADMIN_PASSWORD', '请填写总管理密码');
 define('CLASS_COUNT', 14);
 
 // 数据库结构版本：每次表结构/种子变更时递增，initDatabase 据此跳过已完成的初始化
-define('DB_VERSION', 5);
+define('DB_VERSION', 6);
 
 // 项目版本号（a.b.c.d：d=小改动/修复，c=小添加，b=大改，a=大添加）
 define('APP_VERSION', '1.0.0.0');
@@ -241,6 +241,32 @@ function initDatabase() {
     ] as $k => $v) {
         $stmt->execute([$k, $v]);
     }
+
+    // 分年级时段表（早晚读时间段按年级分开设置；grade 见 gradeList()）
+    $pdo->exec("CREATE TABLE IF NOT EXISTS period_settings (
+        grade INT PRIMARY KEY,
+        morning_start VARCHAR(5) NOT NULL DEFAULT '06:20',
+        morning_end VARCHAR(5) NOT NULL DEFAULT '07:10',
+        evening_start VARCHAR(5) NOT NULL DEFAULT '17:45',
+        evening_end VARCHAR(5) NOT NULL DEFAULT '18:20'
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // 初始化：每个年级一行默认时段
+    $stmt = $pdo->prepare("INSERT IGNORE INTO period_settings (grade, morning_start, morning_end, evening_start, evening_end) VALUES (?, ?, ?, ?, ?)");
+    foreach (array_keys(gradeList()) as $g) {
+        $stmt->execute([$g, '06:20', '07:10', '17:45', '18:20']);
+    }
+    // 迁移：旧全局 settings 表的值归入初三（原年级），保证老数据平滑过渡
+    try {
+        $old = $pdo->query("SELECT setting_key, setting_value FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+        $valid = ['morning_start' => '06:20', 'morning_end' => '07:10', 'evening_start' => '17:45', 'evening_end' => '18:20'];
+        foreach ($valid as $k => $dv) {
+            if (isset($old[$k]) && preg_match('/^\d{1,2}:\d{2}$/', trim($old[$k]))) {
+                $valid[$k] = trim($old[$k]);
+            }
+        }
+        $pdo->prepare("UPDATE period_settings SET morning_start = ?, morning_end = ?, evening_start = ?, evening_end = ? WHERE grade = 9")
+            ->execute(array_values($valid));
+    } catch (PDOException $e) {}
 
     // 种子：每个年级创建对应数量的班（初中14个，高中11个），初始密码 = admin + 两位班级号
     $stmt = $pdo->prepare("INSERT IGNORE INTO classes (grade, class_number, password, teacher_password) VALUES (?, ?, ?, ?)");

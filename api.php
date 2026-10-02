@@ -170,9 +170,9 @@ try {
                     'class_number'  => (int)$class['class_number'],
                     'identity'      => $identity,
                     'server_time'   => date('Y-m-d H:i:s', $now),
-                    'period_text'   => getPeriodRangeText(),
-                    'current_type'  => getCurrentRecordType(), // morning / evening / null
-                    'can_record'    => canRecord(),
+                    'period_text'   => getPeriodRangeText((int)$class['grade']),
+                    'current_type'  => getCurrentRecordType((int)$class['grade']), // morning / evening / null
+                    'can_record'    => canRecord((int)$class['grade']),
                     'token_slot'    => date('YmdH', $now),     // 当前种子时槽
                     'token_expires' => date('Y-m-d H:i:s', $now + 3600), // 本时槽结束后进入下一窗口
                 ],

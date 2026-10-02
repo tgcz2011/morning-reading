@@ -101,8 +101,13 @@ if (isset($_POST['action'])) {
         $r = clearClassData((int)$_POST['class_id']);
     } elseif ($action === 'clear_all_data' && isset($_POST['class_id'])) {
         $r = clearClassAllData((int)$_POST['class_id']);
-    } elseif ($action === 'update_period_settings' && isset($_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end'])) {
-        $r = updatePeriodSettings($_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end']);
+    } elseif ($action === 'update_period_settings' && isset($_POST['grade'], $_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end'])) {
+        $grade = (int)$_POST['grade'];
+        if (!isset(gradeList()[$grade])) {
+            $r = ['success' => false, 'message' => '无效的年级'];
+        } else {
+            $r = updatePeriodSettings($grade, $_POST['morning_start'], $_POST['morning_end'], $_POST['evening_start'], $_POST['evening_end']);
+        }
         $redirect = 'edit.php?tab=settings';
     } elseif ($action === 'preview_import') {
         // 第一步：上传 Excel → 解析 → 存入会话待确认
@@ -372,35 +377,38 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
                 </table>
 
             <?php elseif ($tab === 'settings'): ?>
-                <!-- ========== 早晚读时间段设置 ========== -->
-                <?php $ps = getPeriodSettings(); ?>
-                <h2 class="stats-title">早晚读时间段设置</h2>
+                <!-- ========== 早晚读时间段设置（按年级分开） ========== -->
+                <h2 class="stats-title">早晚读时间段设置（按年级分开）</h2>
                 <div class="stats-note">
-                    <strong>说明：</strong>修改后立即对所有班级的首页与记录接口生效；早读/晚读各自"开始"必须早于"结束"。
+                    <strong>说明：</strong>每个年级单独设置早读/晚读时段，修改后立即对该年级所有班级的首页与记录接口生效；早读/晚读各自"开始"必须早于"结束"。未单独修改过的年级沿用默认值。
                 </div>
-                <form method="POST" class="period-form">
-                    <input type="hidden" name="action" value="update_period_settings">
-                    <div class="period-field">
-                        <label>早读开始</label>
-                        <input type="time" name="morning_start" value="<?php echo $ps['morning_start']; ?>" required>
-                    </div>
-                    <div class="period-field">
-                        <label>早读结束</label>
-                        <input type="time" name="morning_end" value="<?php echo $ps['morning_end']; ?>" required>
-                    </div>
-                    <div class="period-field">
-                        <label>晚读开始</label>
-                        <input type="time" name="evening_start" value="<?php echo $ps['evening_start']; ?>" required>
-                    </div>
-                    <div class="period-field">
-                        <label>晚读结束</label>
-                        <input type="time" name="evening_end" value="<?php echo $ps['evening_end']; ?>" required>
-                    </div>
-                    <button type="submit" class="admin-btn solid period-submit">保存时段设置</button>
-                </form>
-                <div class="stats-note" style="margin-top:10px;">
-                    当前配置：<?php echo getPeriodRangeText(); ?>
+                <?php foreach (gradeList() as $g => $gname): $ps = getPeriodSettings($g); ?>
+                <div class="import-box" style="margin-bottom:14px;">
+                    <div class="import-title"><?php echo $gname; ?>（<?php echo $g; ?> 年级 · <?php echo gradeClassCount($g); ?> 个班）</div>
+                    <form method="POST" class="period-form" style="margin-top:8px;">
+                        <input type="hidden" name="action" value="update_period_settings">
+                        <input type="hidden" name="grade" value="<?php echo $g; ?>">
+                        <div class="period-field">
+                            <label>早读开始</label>
+                            <input type="time" name="morning_start" value="<?php echo $ps['morning_start']; ?>" required>
+                        </div>
+                        <div class="period-field">
+                            <label>早读结束</label>
+                            <input type="time" name="morning_end" value="<?php echo $ps['morning_end']; ?>" required>
+                        </div>
+                        <div class="period-field">
+                            <label>晚读开始</label>
+                            <input type="time" name="evening_start" value="<?php echo $ps['evening_start']; ?>" required>
+                        </div>
+                        <div class="period-field">
+                            <label>晚读结束</label>
+                            <input type="time" name="evening_end" value="<?php echo $ps['evening_end']; ?>" required>
+                        </div>
+                        <button type="submit" class="admin-btn solid period-submit">保存<?php echo $gname; ?>时段</button>
+                        <span class="import-sub" style="margin-left:10px;">当前：<?php echo getPeriodRangeText($g); ?></span>
+                    </form>
                 </div>
+                <?php endforeach; ?>
 
             <?php elseif ($tab === 'data'): ?>
                 <!-- ========== 任意班级数据清空 ========== -->

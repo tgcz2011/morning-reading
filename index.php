@@ -201,7 +201,7 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
             </div>
             <div class="time-info">
                 <?php echo date('Y年m月d日 H:i'); ?> · 第<?php echo getWeekNumber(); ?>周
-                <?php $ct = getCurrentRecordType(); if ($ct) echo ' · ' . ($ct === 'morning' ? '早读' : '晚读'); ?>
+                <?php $ct = getCurrentRecordType(getGrade()); if ($ct) echo ' · ' . ($ct === 'morning' ? '早读' : '晚读'); ?>
             </div>
         </div>
 
@@ -218,9 +218,9 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
             </div>
         <?php endif; ?>
 
-        <?php if (!canRecord()): ?>
+        <?php if (!canRecord(getGrade())): ?>
             <div class="time-restriction">
-                <strong>注意：</strong>当前不在记录时间段内（<?php echo getPeriodRangeText(); ?>）
+                <strong>注意：</strong>当前不在记录时间段内（<?php echo getPeriodRangeText(getGrade()); ?>）
             </div>
         <?php endif; ?>
 
@@ -245,9 +245,9 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
                     $card_class .= ' penalized';
                 } else {
                     // 没有负分且当前时间段没有扣分，正常显示
-                    if (getCurrentRecordType() === 'morning' && $status['today_morning']) {
+                    if (getCurrentRecordType(getGrade()) === 'morning' && $status['today_morning']) {
                         $card_class .= ' recorded';
-                    } elseif (getCurrentRecordType() === 'evening' && $status['today_evening']) {
+                    } elseif (getCurrentRecordType(getGrade()) === 'evening' && $status['today_evening']) {
                         $card_class .= ' recorded';
                     }
                 }
@@ -261,7 +261,7 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
                 $added_chip = $status['session_added'] ? '<div class="added-chip">已加分</div>' : '';
 
                 // 检查是否在可记录时间内
-                $can_record_now = canRecord();
+                $can_record_now = canRecord(getGrade());
                 $add_disabled = !$can_record_now ? 'disabled' : '';
                 $subtract_disabled = !$can_record_now ? 'disabled' : '';
 
@@ -287,7 +287,7 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
             <p>点击 + 加分 · 点击 − 扣分</p>
             <p>绿色「优秀」= 今日该时段已记录 · 红色「差」= 有扣分待补齐 · 黄色「已加分」= 本次朗读已加过分</p>
             <p>一次朗读时间最多加一分，扣分不限</p>
-            <?php if (!canRecord()): ?>
+            <?php if (!canRecord(getGrade())): ?>
             <p class="strong">当前不在记录时间段内，无法进行操作</p>
             <?php endif; ?>
         </div>
@@ -481,7 +481,7 @@ $login_remaining = max(0, 3 * 3600 - (time() - $_SESSION['login_time']));
                 card.classList.add('penalized');
             } else {
                 // 没有负分且当前时间段没有扣分，正常显示
-                const currentType = <?php $ct = getCurrentRecordType(); echo $ct ? "'$ct'" : 'null'; ?>;
+                const currentType = <?php $ct = getCurrentRecordType(getGrade()); echo $ct ? "'$ct'" : 'null'; ?>;
                 if ((currentType === 'morning' && status.today_morning) ||
                     (currentType === 'evening' && status.today_evening)) {
                     card.classList.add('recorded');

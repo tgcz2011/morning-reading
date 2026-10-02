@@ -183,32 +183,39 @@ function getStudentMap($class_id = null) {
 // 时间与时段
 // ============================================================
 
-// 读取时段配置（settings 表，带默认值兜底；可在总管理界面修改）
-function getPeriodSettings() {
-    static $cache = null;
-    if ($cache !== null) return $cache;
-    $defaults = [
-        'morning_start' => '06:20',
-        'morning_end'   => '07:10',
-        'evening_start' => '17:45',
-        'evening_end'   => '18:20',
-    ];
-    try {
-        $rows = getDB()->query("SELECT setting_key, setting_value FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
-        foreach ($defaults as $k => $v) {
-            if (isset($rows[$k]) && preg_match('/^\d{1,2}:\d{2}$/', $rows[$k])) {
-                $defaults[$k] = $rows[$k];
+// 读取某年级的时段配置（period_settings 表，带默认值兜底；可在总管理界面按年级修改）
+function getPeriodSettings($grade) {
+    static $cache = [];
+    $grade = (int)$grade;
+    if (!isset($cache[$grade])) {
+        $defaults = [
+            'morning_start' => '06:20',
+            'morning_end'   => '07:10',
+            'evening_start' => '17:45',
+            'evening_end'   => '18:20',
+        ];
+        try {
+            $stmt = getDB()->prepare("SELECT morning_start, morning_end, evening_start, evening_end FROM period_settings WHERE grade = ?");
+            $stmt->execute([$grade]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                foreach ($defaults as $k => $v) {
+                    if (preg_match('/^\d{1,2}:\d{2}$/', (string)$row[$k])) {
+                        $defaults[$k] = $row[$k];
+                    }
+                }
             }
+        } catch (PDOException $e) {
+            // period_settings 表不存在时用默认值（initDatabase 会创建）
         }
-    } catch (PDOException $e) {
-        // settings 表不存在时用默认值（initDatabase 会创建）
+        $cache[$grade] = $defaults;
     }
-    $cache = $defaults;
-    return $cache;
+    return $cache[$grade];
 }
 
-// 校验并保存时段配置（HH:MM，开始必须早于结束）
-function updatePeriodSettings($morning_start, $morning_end, $evening_start, $evening_end) {
+// 校验并保存某年级的时段配置（HH:MM，开始必须早于结束）
+function updatePeriodSettings($grade, $morning_start, $morning_end, $evening_start, $evening_end) {
+    $grade = (int)$grade;
     $fields = [
         'morning_start' => trim($morning_start),
         'morning_end'   => trim($morning_end),
@@ -228,23 +235,22 @@ function updatePeriodSettings($morning_start, $morning_end, $evening_start, $eve
         return ['success' => false, 'message' => '晚读开始时间必须早于结束时间'];
     }
     $pdo = getDB();
-    $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-    foreach ($fields as $k => $v) {
-        $stmt->execute([$k, $v]);
-    }
-    return ['success' => true, 'message' => '时段设置已保存，首页与记录接口即时生效'];
+    $stmt = $pdo->prepare("INSERT INTO period_settings (grade, morning_start, morning_end, evening_start, evening_end) VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE morning_start = VALUES(morning_start), morning_end = VALUES(morning_end), evening_start = VALUES(evening_start), evening_end = VALUES(evening_end)");
+    $stmt->execute([$grade, $fields['morning_start'], $fields['morning_end'], $fields['evening_start'], $fields['evening_end']]);
+    return ['success' => true, 'message' => gradeName($grade) . '时段设置已保存，该年级首页与记录接口即时生效'];
 }
 
 // 时间段展示文案（供首页提示使用）
-function getPeriodRangeText() {
-    $s = getPeriodSettings();
+function getPeriodRangeText($grade) {
+    $s = getPeriodSettings($grade);
     return '早读：' . $s['morning_start'] . '-' . $s['morning_end'] . '，晚读：' . $s['evening_start'] . '-' . $s['evening_end'];
 }
 
-// 检查是否在可记录时间段内（时间来自 settings 配置）
-function canRecord() {
+// 检查某年级当前是否在可记录时间段内（时间来自该年级的 period_settings 配置）
+function canRecord($grade) {
     $current_minutes = (int)date('H') * 60 + (int)date('i');
-    $s = getPeriodSettings();
+    $s = getPeriodSettings($grade);
     list($h, $m) = explode(':', $s['morning_start']);
     $ms = (int)$h * 60 + (int)$m;
     list($h, $m) = explode(':', $s['morning_end']);
@@ -257,10 +263,10 @@ function canRecord() {
            ($current_minutes >= $es && $current_minutes <= $ee);
 }
 
-// 获取当前记录类型 (早读/晚读)——根据 settings 配置的时段判断，非记录时段返回 null
-function getCurrentRecordType() {
+// 获取某年级当前记录类型 (早读/晚读)——按该年级时段配置判断，非记录时段返回 null
+function getCurrentRecordType($grade) {
     $current_minutes = (int)date('H') * 60 + (int)date('i');
-    $s = getPeriodSettings();
+    $s = getPeriodSettings($grade);
     list($h, $m) = explode(':', $s['morning_start']);
     $ms = (int)$h * 60 + (int)$m;
     list($h, $m) = explode(':', $s['morning_end']);
@@ -302,7 +308,7 @@ function getSemesterWeek($date = null) {
 function hasAddedThisSession($student_id) {
     $pdo = getDB();
     $class_id = getClassId();
-    $type = getCurrentRecordType();
+    $type = getCurrentRecordType(getGrade());
     $today = date('Y-m-d');
     if (!$type) return false;
     $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM reading_records 
@@ -331,13 +337,13 @@ function hasPenaltyThisWeek($student_id) {
 
 // 添加记录（加分）——所有状态存数据库，不依赖 session；事务保证抵消操作原子性
 function addRecord($student_id, $type = null) {
-    if (!canRecord()) {
+    if (!canRecord(getGrade())) {
         return ['success' => false, 'message' => '当前不在可记录时间段内'];
     }
 
     $pdo = getDB();
     $class_id = getClassId();
-    $type = $type ?: getCurrentRecordType();
+    $type = $type ?: getCurrentRecordType(getGrade());
     $today = date('Y-m-d');
     $current_week = getWeekNumber();
 
@@ -406,13 +412,13 @@ function addRecord($student_id, $type = null) {
 
 // 取消记录
 function cancelRecord($student_id, $type = null) {
-    if (!canRecord()) {
+    if (!canRecord(getGrade())) {
         return ['success' => false, 'message' => '当前不在可记录时间段内'];
     }
 
     $pdo = getDB();
     $class_id = getClassId();
-    $type = $type ?: getCurrentRecordType();
+    $type = $type ?: getCurrentRecordType(getGrade());
     $today = date('Y-m-d');
 
     // 查找最新的未取消记录
@@ -435,14 +441,14 @@ function cancelRecord($student_id, $type = null) {
 
 // 扣分处理（扣分不限次数；扣分优先抵消已有的正分记录，被抵消的正分不进入统计）
 function penalizeStudent($student_id) {
-    if (!canRecord()) {
+    if (!canRecord(getGrade())) {
         return ['success' => false, 'message' => '当前不在可记录时间段内'];
     }
 
     $pdo = getDB();
     $class_id = getClassId();
     $current_week = getWeekNumber();
-    $current_type = getCurrentRecordType();
+    $current_type = getCurrentRecordType(getGrade());
 
     // 扣分优先抵消正分：查本周最新一条未取消的正分记录（不区分早读/晚读）
     $stmt = $pdo->prepare("SELECT id, record_type FROM reading_records 
@@ -570,7 +576,7 @@ function getAllStudentsStatus($class_id = null) {
     $class_id = $class_id !== null ? (int)$class_id : getClassId();
     $current_week = getWeekNumber();
     $today = date('Y-m-d');
-    $current_type = getCurrentRecordType(); // 已静态缓存，不查库
+    $current_type = getCurrentRecordType(getGrade()); // 已静态缓存，不查库
 
     // 一次查今日所有记录（含已取消的抵消记录，用于 session_added 判断）
     $stmt = $pdo->prepare("SELECT student_id, record_type, is_canceled FROM reading_records
