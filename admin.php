@@ -220,7 +220,6 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
             <a href="admin.php?tab=students" class="nav-btn <?php echo $tab === 'students' ? 'active' : ''; ?>">学生名单</a>
             <a href="admin.php?tab=passwords" class="nav-btn <?php echo $tab === 'passwords' ? 'active' : ''; ?>">本班密码</a>
             <a href="admin.php?tab=data" class="nav-btn <?php echo $tab === 'data' ? 'active' : ''; ?>">数据管理</a>
-            <a href="admin.php?tab=api" class="nav-btn <?php echo $tab === 'api' ? 'active' : ''; ?>">API 接口</a>
             <form method="POST" style="margin:0;padding:0;display:inline;">
                 <input type="hidden" name="action" value="teacher_logout">
                 <button type="submit" class="nav-btn nav-logout">退出</button>
@@ -381,12 +380,6 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                 <!-- ========== API 接口文档（本班） ========== -->
                 <?php
                 $api_username = getTeacherGrade() . '-' . $teacher_class_number;
-                $api_stmt = getDB()->prepare("SELECT teacher_password FROM classes WHERE id = ?");
-                $api_stmt->execute([$teacher_class_id]);
-                $api_pass = (string)$api_stmt->fetchColumn();
-                $api_slot_key = date('YmdH');
-                $api_seed = hash('sha256', API_SEED . ':' . $api_slot_key . ':teacher'); // 教师身份种子
-                $api_token = hash('sha256', $api_username . ':' . $api_pass . ':' . $api_seed);
                 $api_base = 'http://' . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'zztool.free.nf') . '/morning-reading/api.php';
                 // 免登录链接（2 小时时效）：record → 记录页，teacher → 教师页
                 $link_record = makeLoginLink('record', $api_username);
@@ -417,13 +410,7 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                 </div>
 
                 <div class="import-box">
-                    <div class="import-title">我的 API Token（教师身份 · 当前时段）</div>
-                    <div class="import-sub">用户名：<code><?php echo $api_username; ?></code>（年级-班号） · 本页展示的是「教师管理」身份 token · 种子时槽：<code><?php echo $api_slot_key; ?></code>（北京时间，每小时变化）</div>
-                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;">
-                        <code id="apiTokenBox" style="font-size:.9rem;background:#efe8d8;padding:8px 12px;border-radius:6px;word-break:break-all;flex:1;min-width:200px;"><?php echo $api_token; ?></code>
-                        <button type="button" class="admin-btn solid" id="apiTokenCopyBtn">复制 Token</button>
-                        <button type="button" class="admin-btn" id="apiTokenRefreshBtn">刷新显示</button>
-                    </div>
+                    <div class="import-title">如何获取 Token（不在此展示 · 客户端本地计算）</div>
                     <div class="import-sub"><strong>三种身份</strong>（用户名/密码不同，种子也不同 → token 互不相同，权限从低到高）：</div>
                     <table class="ranking-table" style="margin:10px 0 14px;">
                         <thead><tr><th width="14%">身份</th><th width="20%">用户名</th><th width="26%">密码</th><th width="40%">可用操作</th></tr></thead>
@@ -526,36 +513,6 @@ python3 api_client.py --identity superadmin --user superadmin --pass 总管理�
                     <span>① <code>get_seed</code> 无需登录即可取种子，但没有密码就算不出 token；② 密码永不进入请求，中间人最多拿到当小时有效的 token；③ 修改 config.php 中的 <code>API_SEED</code> 可使全校所有 token 立即失效；④ 总管理身份可操作任意班级，token 请勿泄露或提交到公开仓库；⑤ 本页展示的是教师身份 token，用班级登录身份请将 get_seed 的 identity 换成 record。</span>
                 </div>
                 <script>
-                    // 复制当前 Token
-                    document.getElementById('apiTokenCopyBtn').addEventListener('click', function () {
-                        var t = document.getElementById('apiTokenBox').textContent.trim();
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(t).then(function () {
-                                apiCopyTip();
-                            });
-                        } else {
-                            // 老浏览器降级：选中文本
-                            var range = document.createRange();
-                            range.selectNode(document.getElementById('apiTokenBox'));
-                            window.getSelection().removeAllRanges();
-                            window.getSelection().addRange(range);
-                        }
-                    });
-                    function apiCopyTip() {
-                        var tip = document.getElementById('apiCopyTip');
-                        if (!tip) {
-                            tip = document.createElement('div');
-                            tip.id = 'apiCopyTip';
-                            tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2F6B4F;color:#fff;padding:10px 18px;border-radius:8px;font-size:.9rem;z-index:99;box-shadow:0 4px 12px rgba(0,0,0,.25);';
-                            document.body.appendChild(tip);
-                        }
-                        tip.textContent = 'Token 已复制到剪贴板（当前时段有效，跨小时后自动变化）';
-                        clearTimeout(tip._t);
-                        tip._t = setTimeout(function () { tip.remove(); }, 2500);
-                    }
-                    document.getElementById('apiTokenRefreshBtn').addEventListener('click', function () {
-                        location.reload();
-                    });
                     // 免登录链接复制（通用 data-copy）
                     document.querySelectorAll('button[data-copy]').forEach(function (btn) {
                         btn.addEventListener('click', function () {
@@ -667,6 +624,8 @@ python3 api_client.py --identity superadmin --user superadmin --pass 总管理�
             <a href="<?php echo APP_REPO; ?>" target="_blank" rel="noopener">GitHub 仓库</a>
             <span class="footer-sep">·</span>
             问题反馈：<a href="<?php echo APP_REPO; ?>/issues" target="_blank" rel="noopener">GitHub Issues</a>
+            <span class="footer-sep">·</span>
+            <a href="admin.php?tab=api">API 文档</a>
         </div>
     </footer>
 </body>
