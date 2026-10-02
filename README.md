@@ -185,6 +185,21 @@ python3 api_client.py --identity superadmin --user superadmin --pass 总管理�
 
 错误响应统一为 `{"success": false, "code": <HTTP>, "message": "..."}`，认证失败返回 HTTP 401。
 
+### 网页免登录（Token 直链）
+
+三个页面支持「带 token 直接打开即登录」，链接由管理页一键生成（教师页 API 文档页 / 总管理页顶部），无需输密码：
+
+| 页面 | 链接形式 | 需要的 token 身份 |
+|------|----------|-------------------|
+| 记录页 `index.php` | `?username=9-6&token=<64位hex>&t=<生成时刻>` | record（班级登录密码） |
+| 教师页 `admin.php` | 同上 | teacher（教师管理密码） |
+| 总管理页 `edit.php` | `?username=superadmin&token=<64位hex>&t=<生成时刻>` | superadmin（总管理密码） |
+
+- 三种身份用户名/密码/种子均不同 → token 互不相同；身份不足会被拒绝（如 record token 打不开教师页）。
+- `t` 为链接生成时刻（Unix 时间戳），**链接自生成起 2 小时有效**，过期或 t 被篡改（未来时间）一律回到登录页。
+- 验证通过后页面会用与表单登录完全一致的会话登录并跳转（302 清掉 URL 中的 token），浏览器地址栏不残留 token。
+- 链接等于对应身份的密码，请勿外传；页面内生成入口均带有警示文案。
+
 ## 安全注意事项
 
 - `config.php` 含真实数据库凭据和总管理密码，已被 `.gitignore` 排除，**禁止提交到公开仓库**；公开仓库只保留 `config.example.php` 模板

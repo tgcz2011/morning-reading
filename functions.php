@@ -1090,3 +1090,99 @@ function outputStudentTemplate() {
     echo $local . $central . $eocd;
     exit;
 }
+
+// ============================================================
+// API 认证（api.php 与网页 token 免登录共用同一套算法）
+// ============================================================
+
+// 种子：按身份区分，小时轮换；API_SEED 永不离开服务器
+function apiSeed($identity, $slot_key) {
+    return hash('sha256', API_SEED . ':' . $slot_key . ':' . $identity);
+}
+
+// token = sha256(用户名 : 密码 : 种子)
+function apiTokenFor($username, $password, $seed) {
+    return hash('sha256', $username . ':' . $password . ':' . $seed);
+}
+
+// 按身份解析用户名对应的密码与班级；无效返回 null
+function apiIdentityInfo($identity, $username) {
+    switch ($identity) {
+        case 'superadmin':
+            return ($username === 'superadmin' && defined('SUPERADMIN_PASSWORD') && SUPERADMIN_PASSWORD !== '')
+                ? ['password' => SUPERADMIN_PASSWORD, 'class' => null]
+                : null;
+        case 'teacher':
+        case 'record':
+            if (!preg_match('/^(\d{1,2})-(\d{1,2})$/', $username, $m)) return null;
+            $class = apiFindClass((int)$m[1], (int)$m[2]);
+            if (!$class) return null;
+            $password = ($identity === 'teacher') ? $class['teacher_password'] : $class['password'];
+            if ($password === '' || $password === null) return null;
+            return ['password' => $password, 'class' => $class];
+    }
+    return null;
+}
+
+function apiFindClass($grade, $class_number) {
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT * FROM classes WHERE grade = ? AND class_number = ?");
+    $stmt->execute([(int)$grade, (int)$class_number]);
+    return $stmt->fetch();
+}
+
+// 认证：返回 ['identity' => ..., 'class' => ...]；失败返回 null
+// 按 superadmin → teacher → record 顺序尝试（密码相同时取更高权限），验证窗口 ±1 小时
+function apiAuthenticate() {
+    // 取 token：Authorization: Bearer xxx 或 ?token=xxx
+    $token = null;
+    $auth = isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '';
+    if (preg_match('/^Bearer\s+(.+)$/i', trim($auth), $m)) {
+        $token = trim($m[1]);
+    }
+    if (!$token && isset($_REQUEST['token'])) {
+        $token = trim((string)$_REQUEST['token']);
+    }
+    if (!$token || !preg_match('/^[0-9a-f]{64}$/', $token)) {
+        return null;
+    }
+
+    $username = isset($_REQUEST['username']) ? trim($_REQUEST['username']) : (isset($_REQUEST['u']) ? trim($_REQUEST['u']) : '');
+    if ($username === '') return null;
+
+    foreach (['superadmin', 'teacher', 'record'] as $identity) {
+        $info = apiIdentityInfo($identity, $username);
+        if ($info === null) continue;
+        for ($offset = -1; $offset <= 1; $offset++) {
+            $slot = date('YmdH', time() + $offset * 3600);
+            if (hash_equals(apiTokenFor($username, $info['password'], apiSeed($identity, $slot)), $token)) {
+                return ['identity' => $identity, 'class' => $info['class']];
+            }
+        }
+    }
+    return null;
+}
+
+// 网页免登录：验证 URL 中的 token（?username=&token=&t=，t 为生成时刻，2 小时时效）
+// $required_identity：页面要求的最低身份（record/teacher/superadmin），身份不足返回 null
+function loginByApiToken($required_identity) {
+    if (!isset($_REQUEST['token'], $_REQUEST['username'], $_REQUEST['t'])) return null;
+    $t = (int)$_REQUEST['t'];
+    if ($t <= 0 || time() - $t >= 7200 || $t > time() + 300) return null; // 链接 2 小时时效（允许 5 分钟时钟偏差，拒绝未来时间）
+    $auth = apiAuthenticate();
+    if (!$auth) return null;
+    $rank = ['record' => 1, 'teacher' => 2, 'superadmin' => 3];
+    if (($rank[$auth['identity']] ?? 0) < $rank[$required_identity]) return null;
+    return $auth;
+}
+
+// 服务端生成免登录链接（2 小时时效）：$identity=record→记录页 / teacher→教师页 / superadmin→总管理页
+function makeLoginLink($identity, $username) {
+    $info = apiIdentityInfo($identity, $username);
+    if (!$info) return null;
+    $seed = apiSeed($identity, date('YmdH'));
+    $token = apiTokenFor($username, $info['password'], $seed);
+    $page = ['record' => 'index.php', 'teacher' => 'admin.php', 'superadmin' => 'edit.php'][$identity] ?? null;
+    if (!$page) return null;
+    return $page . '?username=' . rawurlencode($username) . '&token=' . $token . '&t=' . time();
+}

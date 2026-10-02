@@ -16,6 +16,28 @@ if (isset($_GET['logout'])) {
     exit;
 }
 
+// ================= token 免登录（record 身份，链接 2 小时时效） =================
+// 用法：index.php?username=9-6&token=xxx&t=<生成时刻>，token 由教师/总管理页一键生成
+if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || empty($_SESSION['class_id'])) {
+    $auth = loginByApiToken('record');
+    if ($auth && $auth['class']) {
+        // 与表单登录完全一致的登录态（含单会话锁）
+        $token = bin2hex(random_bytes(32));
+        try {
+            getDB()->prepare("UPDATE classes SET active_session_token = ? WHERE id = ?")
+                ->execute([$token, (int)$auth['class']['id']]);
+        } catch (Exception $e) {}
+        $_SESSION['logged_in'] = true;
+        $_SESSION['class_id'] = (int)$auth['class']['id'];
+        $_SESSION['class_number'] = (int)$auth['class']['class_number'];
+        $_SESSION['grade'] = (int)$auth['class']['grade'];
+        $_SESSION['session_token'] = $token;
+        $_SESSION['login_time'] = time(); // 记录页登录有效期 3 小时
+        header('Location: index.php');
+        exit;
+    }
+}
+
 // 处理登录
 if (isset($_POST['login'])) {
     initDatabase();

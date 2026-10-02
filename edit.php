@@ -17,6 +17,17 @@ if (isset($_POST['super_login'])) {
     }
 }
 
+// ================= token 免登录（superadmin 身份，链接 2 小时时效） =================
+// 用法：edit.php?username=superadmin&token=xxx&t=<生成时刻>，token 在总管理页内一键生成
+if (!isset($_SESSION['super_logged_in']) || $_SESSION['super_logged_in'] !== true) {
+    $auth = loginByApiToken('superadmin');
+    if ($auth) {
+        $_SESSION['super_logged_in'] = true;
+        header('Location: edit.php');
+        exit;
+    }
+}
+
 if (!isset($_SESSION['super_logged_in']) || $_SESSION['super_logged_in'] !== true) {
     ?>
     <!DOCTYPE html>
@@ -180,11 +191,21 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
             <div class="message <?php echo $message_type; ?>"><?php echo $message; ?></div>
         <?php endif; ?>
 
+        <?php
+        $super_link = makeLoginLink('superadmin', 'superadmin');
+        ?>
         <div class="admin-body">
+            <div class="import-box" style="margin-bottom:14px;">
+                <div class="import-title">总管理免登录链接（2 小时有效）</div>
+                <div class="import-sub">复制后直接打开即进入总管理，无需输密码；过期回登录页。注意：该链接等于总管理密码，切勿外传。</div>
+                <div style="margin:10px 0;">
+                    <code id="superLinkBox" style="font-size:.85rem;background:#efe8d8;padding:6px 10px;border-radius:6px;word-break:break-all;display:inline-block;max-width:75%;vertical-align:middle;"><?php echo htmlspecialchars($super_link); ?></code>
+                    <button type="button" class="admin-btn small" id="superLinkCopyBtn">复制</button>
+                </div>
+            </div>
             <?php if ($tab === 'classes'): ?>
                 <!-- ========== 全部班级与密码 ========== -->
                 <h2 class="stats-title">全部班级与密码</h2>
-                <div class="stats-note">
                     <strong>说明：</strong>
                     <span>班级密码 = 学生登录记录页用；教师管理密码 = 老师登录 admin.php 用。两者分开，可分别修改。</span>
                 </div>
@@ -446,6 +467,32 @@ $import_preview = isset($_SESSION['import_preview'][$sel_class]) ? $_SESSION['im
     </div>
 
     <script>
+        // 总管理免登录链接复制
+        document.getElementById('superLinkCopyBtn').addEventListener('click', function () {
+            var el = document.getElementById('superLinkBox');
+            var t = el.textContent.trim();
+            var done = function () {
+                var tip = document.getElementById('superLinkTip');
+                if (!tip) {
+                    tip = document.createElement('div');
+                    tip.id = 'superLinkTip';
+                    tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2F6B4F;color:#fff;padding:10px 18px;border-radius:8px;font-size:.9rem;z-index:99;box-shadow:0 4px 12px rgba(0,0,0,.25);';
+                    document.body.appendChild(tip);
+                }
+                tip.textContent = '总管理免登录链接已复制（2 小时内有效，过期需重新生成）';
+                clearTimeout(tip._t);
+                tip._t = setTimeout(function () { tip.remove(); }, 3000);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(t).then(done);
+            } else {
+                var range = document.createRange();
+                range.selectNode(el);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                done();
+            }
+        });
         // 自绘确认弹窗
         let confirmOkCallback = null;
 

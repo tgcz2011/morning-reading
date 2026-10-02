@@ -318,6 +318,7 @@ git push origin v1.0.0.0
 - **端点**：get_seed（无鉴权）/ verify_token（返回 valid/身份/剩余有效期，无效 200+valid=false）/ status / students
 - **自动客户端**：`api_client.py`（纯 Python 标准库、零依赖）内嵌 AES-128 解密自动过 InfinityFree 挑战，自动取种子算 token；CLI 用法见文件头注释与 admin.php API 文档页。 / stats(period=day|week|month|semester|total) / add_record / cancel_record / penalize / add_student / update_student / delete_student / import_students(JSON 或文本行) / clear_data / clear_all_data。record 访问管理端点返回 403。
 - **错误**：统一 `{"success":false,"code":HTTP,"message":"..."}`；认证失败 401（响应附 `slot` 便于重算）；未知 action 400。
+- **网页免登录（token 直链）**：三页面支持 `?username=&token=&t=` 直开免登录——index.php=record（建立与表单登录一致的会话+单会话锁+login_time 3h）、admin.php=teacher（teacher_* 会话 7d）、edit.php=superadmin；身份不足拒绝（record token 打不开 admin/edit）。`t`=生成时刻，链接 2h 时效（`time()-t>=7200` 或未来超 5 分钟偏差即拒），验证成功 302 跳自身清掉 URL token。生成入口：admin.php?tab=api 的「免登录链接」块（record/teacher 两条）+ edit.php 顶部「总管理免登录链接」。认证函数（apiSeed/apiTokenFor/apiIdentityInfo/apiFindClass/apiAuthenticate/loginByApiToken/makeLoginLink）已从 api.php 迁入 functions.php 尾部，**api.php 与页面共用同一套**；改其一必改其二者需同步。
 - **中文参数**：URL query 中文在部分环境解析失败，文档建议 `-d` 表单传 `name` 等。
 - **踩坑**：① `penalizeStudent` 成功返回无 `message` 键，api.php 直接读 `$r['message']` 会 Undefined key warning 污染 JSON——已用 `isset()` 兜底；② `parseCsvText` 的 `str_getcsv($line)` 单参数在 PHP 8.4 弃用、warning 破坏 JSON——已显式传 escape 参数；③ classes 表班级登录密码字段名是 `password` 而非 `class_password`，写错会全部 401。
 - **文档位置**：admin.php?tab=api（教师管理页，展示教师身份 Token + 复制按钮 + 三身份表 + 端点表 + bash 取种子示例）；README.md「API 接口」章节。

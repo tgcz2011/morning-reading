@@ -26,6 +26,21 @@ if (isset($_SESSION['teacher_logged_in']) && $_SESSION['teacher_logged_in'] === 
     session_destroy();
 }
 
+// ================= token 免登录（teacher 身份，链接 2 小时时效） =================
+// 用法：admin.php?username=9-6&token=xxx&t=<生成时刻>，token 由教师/总管理页一键生成
+if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !== true) {
+    $auth = loginByApiToken('teacher');
+    if ($auth && $auth['class']) {
+        $_SESSION['teacher_logged_in'] = true;
+        $_SESSION['teacher_class_id'] = (int)$auth['class']['id'];
+        $_SESSION['teacher_class_number'] = (int)$auth['class']['class_number'];
+        $_SESSION['teacher_grade'] = (int)$auth['class']['grade'];
+        $_SESSION['teacher_login_time'] = time(); // 教师页登录有效期 7 天
+        header('Location: admin.php');
+        exit;
+    }
+}
+
 if (!isset($_SESSION['teacher_logged_in']) || $_SESSION['teacher_logged_in'] !== true) {
     ?>
     <!DOCTYPE html>
@@ -373,8 +388,29 @@ $import_preview = isset($_SESSION['import_preview'][$teacher_class_id]) ? $_SESS
                 $api_seed = hash('sha256', API_SEED . ':' . $api_slot_key . ':teacher'); // 教师身份种子
                 $api_token = hash('sha256', $api_username . ':' . $api_pass . ':' . $api_seed);
                 $api_base = 'http://' . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'zztool.free.nf') . '/morning-reading/api.php';
+                // 免登录链接（2 小时时效）：record → 记录页，teacher → 教师页
+                $link_record = makeLoginLink('record', $api_username);
+                $link_teacher = makeLoginLink('teacher', $api_username);
                 ?>
                 <h2 class="stats-title">API 接口文档</h2>
+
+                <div class="import-box" style="margin-bottom:14px;">
+                    <div class="import-title">免登录链接（2 小时有效 · 点击复制，直接打开即登录，无需输密码）</div>
+                    <div class="import-sub">三种身份密码分开，链接也分开：记录页用班级登录身份，教师页用教师管理身份；打开链接后 2 小时内有效，过期回登录页。</div>
+                    <div style="margin:10px 0;">
+                        <div style="margin-bottom:8px;">
+                            <span class="import-sub" style="display:inline-block;min-width:110px;">记录页（大屏/平板）：</span>
+                            <code id="linkRecordBox" style="font-size:.85rem;background:#efe8d8;padding:6px 10px;border-radius:6px;word-break:break-all;display:inline-block;max-width:70%;vertical-align:middle;"><?php echo htmlspecialchars($link_record); ?></code>
+                            <button type="button" class="admin-btn small" data-copy="linkRecordBox">复制</button>
+                        </div>
+                        <div>
+                            <span class="import-sub" style="display:inline-block;min-width:110px;">教师页：</span>
+                            <code id="linkTeacherBox" style="font-size:.85rem;background:#efe8d8;padding:6px 10px;border-radius:6px;word-break:break-all;display:inline-block;max-width:70%;vertical-align:middle;"><?php echo htmlspecialchars($link_teacher); ?></code>
+                            <button type="button" class="admin-btn small" data-copy="linkTeacherBox">复制</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="stats-note">
                     <strong>认证方式（三步）：</strong>
                     <span>① 调 <code>action=get_seed</code> 获取种子（无需登录，需带身份参数）→ ② 客户端用「用户名 + 密码 + 种子」本地算出 token → ③ 请求头带 <code>Authorization: Bearer &lt;token&gt;</code>（或 <code>?token=</code>）。密码和种子永不通过网络传输；token 每小时随种子轮换自动失效。</span>
@@ -519,6 +555,34 @@ python3 api_client.py --identity superadmin --user superadmin --pass 总管理�
                     }
                     document.getElementById('apiTokenRefreshBtn').addEventListener('click', function () {
                         location.reload();
+                    });
+                    // 免登录链接复制（通用 data-copy）
+                    document.querySelectorAll('button[data-copy]').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            var el = document.getElementById(btn.getAttribute('data-copy'));
+                            var t = el.textContent.trim();
+                            var done = function () {
+                                var tip = document.getElementById('apiCopyTip');
+                                if (!tip) {
+                                    tip = document.createElement('div');
+                                    tip.id = 'apiCopyTip';
+                                    tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2F6B4F;color:#fff;padding:10px 18px;border-radius:8px;font-size:.9rem;z-index:99;box-shadow:0 4px 12px rgba(0,0,0,.25);';
+                                    document.body.appendChild(tip);
+                                }
+                                tip.textContent = '免登录链接已复制（2 小时内有效，过期需重新生成）';
+                                clearTimeout(tip._t);
+                                tip._t = setTimeout(function () { tip.remove(); }, 3000);
+                            };
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(t).then(done);
+                            } else {
+                                var range = document.createRange();
+                                range.selectNode(el);
+                                window.getSelection().removeAllRanges();
+                                window.getSelection().addRange(range);
+                                done();
+                            }
+                        });
                     });
                 </script>
             <?php endif; ?>
